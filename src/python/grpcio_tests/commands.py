@@ -119,6 +119,8 @@ class TestGevent(setuptools.Command):
         # I have no idea why this doesn't work in gevent, but it shouldn't even be
         # using the c-core
         'testing._client_test.ClientTest.test_infinite_request_stream_real_time',
+        # TODO(https://github.com/grpc/grpc/issues/15743) enable this test
+        'unit._session_cache_test.SSLSessionCacheTest.testSSLSessionCacheLRU',
         # TODO(https://github.com/grpc/grpc/issues/14789) enable this test
         'unit._server_ssl_cert_config_test',
         # TODO(https://github.com/grpc/grpc/issues/14901) enable this test
@@ -200,3 +202,28 @@ class RunInterop(test.test):
         from tests.interop import client
         sys.argv[1:] = self.args.split()
         client.test_interoperability()
+
+
+class RunFork(test.test):
+
+    description = 'run fork test client'
+    user_options = [('args=', 'a', 'pass-thru arguments for the client')]
+
+    def initialize_options(self):
+        self.args = ''
+
+    def finalize_options(self):
+        # distutils requires this override.
+        pass
+
+    def run(self):
+        if self.distribution.install_requires:
+            self.distribution.fetch_build_eggs(
+                self.distribution.install_requires)
+        if self.distribution.tests_require:
+            self.distribution.fetch_build_eggs(self.distribution.tests_require)
+        # We import here to ensure that our setuptools parent has had a chance to
+        # edit the Python system path.
+        from tests.fork import client
+        sys.argv[1:] = self.args.split()
+        client.test_fork()

@@ -53,12 +53,7 @@ def _safe_report_name(name):
 
 
 def _report_filename(name):
-    """Generates report file name"""
-    return 'report_%s_%s' % (_safe_report_name(name), _REPORT_SUFFIX)
-
-
-def _report_filename_internal_ci(name):
-    """Generates report file name that leads to better presentation by internal CI"""
+    """Generates report file name with directory structure that leads to better presentation by internal CI"""
     return '%s/%s' % (_safe_report_name(name), _REPORT_SUFFIX)
 
 
@@ -245,6 +240,8 @@ def _create_test_jobs(extra_args=[], inner_jobs=_DEFAULT_INNER_JOBS):
         languages=['c'],
         configs=['msan', 'asan', 'tsan', 'ubsan'],
         platforms=['linux'],
+        arch='x64',
+        compiler='clang7.0',
         labels=['sanitizers', 'corelang'],
         extra_args=extra_args,
         inner_jobs=inner_jobs,
@@ -253,6 +250,8 @@ def _create_test_jobs(extra_args=[], inner_jobs=_DEFAULT_INNER_JOBS):
         languages=['c++'],
         configs=['asan'],
         platforms=['linux'],
+        arch='x64',
+        compiler='clang7.0',
         labels=['sanitizers', 'corelang'],
         extra_args=extra_args,
         inner_jobs=inner_jobs,
@@ -261,6 +260,8 @@ def _create_test_jobs(extra_args=[], inner_jobs=_DEFAULT_INNER_JOBS):
         languages=['c++'],
         configs=['tsan'],
         platforms=['linux'],
+        arch='x64',
+        compiler='clang7.0',
         labels=['sanitizers', 'corelang'],
         extra_args=extra_args,
         inner_jobs=inner_jobs,
@@ -286,7 +287,7 @@ def _create_portability_test_jobs(extra_args=[],
     # portability C and C++ on x64
     for compiler in [
             'gcc4.8', 'gcc5.3', 'gcc7.2', 'gcc_musl', 'clang3.5', 'clang3.6',
-            'clang3.7'
+            'clang3.7', 'clang7.0'
     ]:
         test_jobs += _generate_jobs(
             languages=['c', 'c++'],
@@ -501,8 +502,9 @@ if __name__ == "__main__":
         default=False,
         action='store_const',
         const=True,
-        help='Put reports into subdirectories to improve presentation of '
-        'results by Internal CI.')
+        help=
+        '(Deprecated, has no effect) Put reports into subdirectories to improve presentation of '
+        'results by Kokoro.')
     argp.add_argument(
         '--bq_result_table',
         default='',
@@ -510,9 +512,6 @@ if __name__ == "__main__":
         nargs='?',
         help='Upload test results to a specified BQ table.')
     args = argp.parse_args()
-
-    if args.internal_ci:
-        _report_filename = _report_filename_internal_ci  # override the function
 
     extra_args = []
     if args.build_only:

@@ -142,7 +142,7 @@ class Verifier {
   // to call the lambda
   void Verify(CompletionQueue* cq,
               std::chrono::system_clock::time_point deadline,
-              std::function<void(void)> lambda) {
+              const std::function<void(void)>& lambda) {
     if (expectations_.empty()) {
       bool ok;
       void* got_tag;
@@ -178,7 +178,7 @@ class Verifier {
           EXPECT_EQ(it2->second.ok, ok);
         }
       } else {
-        gpr_log(GPR_ERROR, "Unexpected tag: %p", tag);
+        gpr_log(GPR_ERROR, "Unexpected tag: %p", got_tag);
         abort();
       }
     }
@@ -891,7 +891,7 @@ TEST_P(AsyncEnd2endTest, ClientInitialMetadataRpc) {
                         cq_.get(), tag(2));
   Verifier().Expect(2, true).Verify(cq_.get());
   EXPECT_EQ(send_request.message(), recv_request.message());
-  auto client_initial_metadata = srv_ctx.client_metadata();
+  const auto& client_initial_metadata = srv_ctx.client_metadata();
   EXPECT_EQ(meta1.second,
             ToString(client_initial_metadata.find(meta1.first)->second));
   EXPECT_EQ(meta2.second,
@@ -937,7 +937,7 @@ TEST_P(AsyncEnd2endTest, ServerInitialMetadataRpc) {
   srv_ctx.AddInitialMetadata(meta2.first, meta2.second);
   response_writer.SendInitialMetadata(tag(3));
   Verifier().Expect(3, true).Expect(4, true).Verify(cq_.get());
-  auto server_initial_metadata = cli_ctx.GetServerInitialMetadata();
+  const auto& server_initial_metadata = cli_ctx.GetServerInitialMetadata();
   EXPECT_EQ(meta1.second,
             ToString(server_initial_metadata.find(meta1.first)->second));
   EXPECT_EQ(meta2.second,
@@ -990,7 +990,7 @@ TEST_P(AsyncEnd2endTest, ServerTrailingMetadataRpc) {
 
   EXPECT_EQ(send_response.message(), recv_response.message());
   EXPECT_TRUE(recv_status.ok());
-  auto server_trailing_metadata = cli_ctx.GetServerTrailingMetadata();
+  const auto& server_trailing_metadata = cli_ctx.GetServerTrailingMetadata();
   EXPECT_EQ(meta1.second,
             ToString(server_trailing_metadata.find(meta1.first)->second));
   EXPECT_EQ(meta2.second,
@@ -1038,7 +1038,7 @@ TEST_P(AsyncEnd2endTest, MetadataRpc) {
                         cq_.get(), tag(2));
   Verifier().Expect(2, true).Verify(cq_.get());
   EXPECT_EQ(send_request.message(), recv_request.message());
-  auto client_initial_metadata = srv_ctx.client_metadata();
+  const auto& client_initial_metadata = srv_ctx.client_metadata();
   EXPECT_EQ(meta1.second,
             ToString(client_initial_metadata.find(meta1.first)->second));
   EXPECT_EQ(meta2.second,
@@ -1049,7 +1049,7 @@ TEST_P(AsyncEnd2endTest, MetadataRpc) {
   srv_ctx.AddInitialMetadata(meta4.first, meta4.second);
   response_writer.SendInitialMetadata(tag(3));
   Verifier().Expect(3, true).Expect(4, true).Verify(cq_.get());
-  auto server_initial_metadata = cli_ctx.GetServerInitialMetadata();
+  const auto& server_initial_metadata = cli_ctx.GetServerInitialMetadata();
   EXPECT_EQ(meta3.second,
             ToString(server_initial_metadata.find(meta3.first)->second));
   EXPECT_EQ(meta4.second,
@@ -1066,7 +1066,7 @@ TEST_P(AsyncEnd2endTest, MetadataRpc) {
 
   EXPECT_EQ(send_response.message(), recv_response.message());
   EXPECT_TRUE(recv_status.ok());
-  auto server_trailing_metadata = cli_ctx.GetServerTrailingMetadata();
+  const auto& server_trailing_metadata = cli_ctx.GetServerTrailingMetadata();
   EXPECT_EQ(meta5.second,
             ToString(server_trailing_metadata.find(meta5.first)->second));
   EXPECT_EQ(meta6.second,
@@ -1144,7 +1144,7 @@ TEST_P(AsyncEnd2endTest, ServerCheckDone) {
 
 TEST_P(AsyncEnd2endTest, UnimplementedRpc) {
   ChannelArguments args;
-  auto channel_creds = GetCredentialsProvider()->GetChannelCredentials(
+  const auto& channel_creds = GetCredentialsProvider()->GetChannelCredentials(
       GetParam().credentials_type, &args);
   std::shared_ptr<Channel> channel =
       !(GetParam().inproc)
@@ -1709,7 +1709,7 @@ TEST_P(AsyncEnd2endServerTryCancelTest, ServerBidiStreamingTryCancelAfter) {
 }
 
 std::vector<TestScenario> CreateTestScenarios(bool test_secure,
-                                              int test_big_limit) {
+                                              bool test_message_size_limit) {
   std::vector<TestScenario> scenarios;
   std::vector<grpc::string> credentials_types;
   std::vector<grpc::string> messages;
@@ -1731,13 +1731,18 @@ std::vector<TestScenario> CreateTestScenarios(bool test_secure,
   GPR_ASSERT(!credentials_types.empty());
 
   messages.push_back("Hello");
-  for (int sz = 1; sz <= test_big_limit; sz *= 32) {
-    grpc::string big_msg;
-    for (int i = 0; i < sz * 1024; i++) {
-      char c = 'a' + (i % 26);
-      big_msg += c;
+  if (test_message_size_limit) {
+    for (size_t k = 1; k < GRPC_DEFAULT_MAX_RECV_MESSAGE_LENGTH / 1024;
+         k *= 32) {
+      grpc::string big_msg;
+      for (size_t i = 0; i < k * 1024; ++i) {
+        char c = 'a' + (i % 26);
+        big_msg += c;
+      }
+      messages.push_back(big_msg);
     }
-    messages.push_back(big_msg);
+    messages.push_back(
+        grpc::string(GRPC_DEFAULT_MAX_RECV_MESSAGE_LENGTH - 10, 'a'));
   }
 
   // TODO (sreek) Renable tests with health check service after the issue
@@ -1758,10 +1763,10 @@ std::vector<TestScenario> CreateTestScenarios(bool test_secure,
 }
 
 INSTANTIATE_TEST_CASE_P(AsyncEnd2end, AsyncEnd2endTest,
-                        ::testing::ValuesIn(CreateTestScenarios(true, 1024)));
+                        ::testing::ValuesIn(CreateTestScenarios(true, true)));
 INSTANTIATE_TEST_CASE_P(AsyncEnd2endServerTryCancel,
                         AsyncEnd2endServerTryCancelTest,
-                        ::testing::ValuesIn(CreateTestScenarios(false, 0)));
+                        ::testing::ValuesIn(CreateTestScenarios(false, false)));
 
 }  // namespace
 }  // namespace testing

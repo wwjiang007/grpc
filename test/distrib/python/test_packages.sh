@@ -22,13 +22,17 @@ shopt -s nullglob
 if [[ "$1" == "binary" ]]
 then
   echo "Testing Python binary distribution"
-  ARCHIVES=("$EXTERNAL_GIT_ROOT"/input_artifacts/grpcio-*.whl)
-  TOOLS_ARCHIVES=("$EXTERNAL_GIT_ROOT"/input_artifacts/grpcio_tools-*.whl)
+  ARCHIVES=("$EXTERNAL_GIT_ROOT"/input_artifacts/grpcio-[0-9]*.whl)
+  TOOLS_ARCHIVES=("$EXTERNAL_GIT_ROOT"/input_artifacts/grpcio_tools-[0-9]*.whl)
 else
   echo "Testing Python source distribution"
-  ARCHIVES=("$EXTERNAL_GIT_ROOT"/input_artifacts/grpcio-*.tar.gz)
-  TOOLS_ARCHIVES=("$EXTERNAL_GIT_ROOT"/input_artifacts/grpcio_tools-*.tar.gz)
+  ARCHIVES=("$EXTERNAL_GIT_ROOT"/input_artifacts/grpcio-[0-9]*.tar.gz)
+  TOOLS_ARCHIVES=("$EXTERNAL_GIT_ROOT"/input_artifacts/grpcio-tools-[0-9]*.tar.gz)
 fi
+
+HEALTH_ARCHIVES=("$EXTERNAL_GIT_ROOT"/input_artifacts/grpcio-health-checking-[0-9]*.tar.gz)
+REFLECTION_ARCHIVES=("$EXTERNAL_GIT_ROOT"/input_artifacts/grpcio-reflection-[0-9]*.tar.gz)
+TESTING_ARCHIVES=("$EXTERNAL_GIT_ROOT"/input_artifacts/grpcio-testing-[0-9]*.tar.gz)
 
 VIRTUAL_ENV=$(mktemp -d)
 virtualenv "$VIRTUAL_ENV"
@@ -51,6 +55,10 @@ function at_least_one_installs() {
 
 at_least_one_installs "${ARCHIVES[@]}"
 at_least_one_installs "${TOOLS_ARCHIVES[@]}"
+at_least_one_installs "${HEALTH_ARCHIVES[@]}"
+at_least_one_installs "${REFLECTION_ARCHIVES[@]}"
+at_least_one_installs "${TESTING_ARCHIVES[@]}"
+
 
 #
 # Test our distributions

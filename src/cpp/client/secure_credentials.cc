@@ -83,7 +83,8 @@ std::shared_ptr<ChannelCredentials> SslCredentials(
 
   grpc_channel_credentials* c_creds = grpc_ssl_credentials_create(
       options.pem_root_certs.empty() ? nullptr : options.pem_root_certs.c_str(),
-      options.pem_private_key.empty() ? nullptr : &pem_key_cert_pair, nullptr);
+      options.pem_private_key.empty() ? nullptr : &pem_key_cert_pair, nullptr,
+      nullptr);
   return WrapChannelCredentials(c_creds);
 }
 
@@ -104,6 +105,13 @@ std::shared_ptr<ChannelCredentials> AltsCredentials(
   grpc_channel_credentials* c_creds = grpc_alts_credentials_create(c_options);
   grpc_alts_credentials_options_destroy(c_options);
   return WrapChannelCredentials(c_creds);
+}
+
+// Builds Local Credentials
+std::shared_ptr<ChannelCredentials> LocalCredentials(
+    grpc_local_connect_type type) {
+  GrpcLibraryCodegen init;  // To call grpc_init().
+  return WrapChannelCredentials(grpc_local_credentials_create(type));
 }
 
 }  // namespace experimental

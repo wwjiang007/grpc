@@ -312,6 +312,12 @@ static void internal_add_error(grpc_error** err, grpc_error* new_err) {
 // It is very common to include and extra int and string in an error
 #define SURPLUS_CAPACITY (2 * SLOTS_PER_INT + SLOTS_PER_TIME)
 
+static bool g_error_creation_allowed = true;
+
+void grpc_disable_error_creation() { g_error_creation_allowed = false; }
+
+void grpc_enable_error_creation() { g_error_creation_allowed = true; }
+
 grpc_error* grpc_error_create(const char* file, int line, grpc_slice desc,
                               grpc_error** referencing,
                               size_t num_referencing) {
@@ -326,6 +332,12 @@ grpc_error* grpc_error_create(const char* file, int line, grpc_slice desc,
     return GRPC_ERROR_OOM;
   }
 #ifndef NDEBUG
+  if (!g_error_creation_allowed) {
+    gpr_log(GPR_ERROR,
+            "Error creation occurred when error creation was disabled [%s:%d]",
+            file, line);
+    abort();
+  }
   if (grpc_trace_error_refcount.enabled()) {
     gpr_log(GPR_DEBUG, "%p create [%s:%d]", err, file, line);
   }
@@ -501,9 +513,24 @@ bool grpc_error_get_str(grpc_error* err, grpc_error_strs which,
 
 grpc_error* grpc_error_add_child(grpc_error* src, grpc_error* child) {
   GPR_TIMER_SCOPE("grpc_error_add_child", 0);
-  grpc_error* new_err = copy_error_and_unref(src);
-  internal_add_error(&new_err, child);
-  return new_err;
+  if (src != GRPC_ERROR_NONE) {
+    if (child == GRPC_ERROR_NONE) {
+      /* \a child is empty. Simply return the ref to \a src */
+      return src;
+    } else if (child != src) {
+      grpc_error* new_err = copy_error_and_unref(src);
+      internal_add_error(&new_err, child);
+      return new_err;
+    } else {
+      /* \a src and \a child are the same. Drop one of the references and return
+       * the other */
+      GRPC_ERROR_UNREF(child);
+      return src;
+    }
+  } else {
+    /* \a src is empty. Simply return the ref to \a child */
+    return child;
+  }
 }
 
 static const char* no_error_string = "\"No Error\"";

@@ -15,10 +15,12 @@
 cimport cpython
 
 
+# TODO(https://github.com/grpc/grpc/issues/15662): Reform this.
 cdef void* _copy_pointer(void* pointer):
   return pointer
 
 
+# TODO(https://github.com/grpc/grpc/issues/15662): Reform this.
 cdef void _destroy_pointer(void* pointer):
   pass
 
@@ -30,6 +32,22 @@ cdef int _compare_pointer(void* first_pointer, void* second_pointer):
     return 1
   else:
     return 0
+
+
+cdef class _GrpcArgWrapper:
+
+  cdef grpc_arg arg
+
+
+cdef tuple _wrap_grpc_arg(grpc_arg arg):
+  wrapped = _GrpcArgWrapper()
+  wrapped.arg = arg
+  return ("grpc.python._cygrpc._GrpcArgWrapper", wrapped)
+
+
+cdef grpc_arg _unwrap_grpc_arg(tuple wrapped_arg):
+  cdef _GrpcArgWrapper wrapped = wrapped_arg[1]
+  return wrapped.arg
 
 
 cdef class _ArgumentProcessor:
@@ -49,6 +67,8 @@ cdef class _ArgumentProcessor:
       if encoded_value is not value:
         references.append(encoded_value)
       self.c_argument.value.string = encoded_value
+    elif isinstance(value, _GrpcArgWrapper):
+      self.c_argument = (<_GrpcArgWrapper>value).arg
     elif hasattr(value, '__int__'):
       # Pointer objects must override __int__() to return
       # the underlying C address (Python ints are word size). The

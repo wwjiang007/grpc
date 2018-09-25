@@ -35,7 +35,7 @@
 
   def get_deps(target_dict):
     deps = []
-    if target_dict.get('baselib', False):
+    if target_dict.get('baselib', False) or target_dict['name'] == 'address_sorting':
       deps.append("${_gRPC_BASELIB_LIBRARIES}")
     if target_dict.get('build', None) in ['protoc']:
       deps.append("${_gRPC_PROTOBUF_PROTOC_LIBRARIES}")
@@ -82,10 +82,12 @@
   set(gRPC_INSTALL_LIBDIR "lib" CACHE STRING "Installation directory for libraries")
   set(gRPC_INSTALL_INCLUDEDIR "include" CACHE STRING "Installation directory for headers")
   set(gRPC_INSTALL_CMAKEDIR "lib/cmake/<%text>${PACKAGE_NAME}</%text>" CACHE STRING "Installation directory for cmake config files")
+  set(gRPC_INSTALL_SHAREDIR "share/grpc" CACHE STRING "Installation directory for root certificates")
 
   # Options
   option(gRPC_BUILD_TESTS "Build tests" OFF)
   option(gRPC_BUILD_CODEGEN "Build codegen" ON)
+  option(gRPC_BUILD_CSHARP_EXT "Build C# extensions" ON)
 
   set(gRPC_INSTALL_default ON)
   if (NOT CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
@@ -147,6 +149,8 @@
     add_definitions(-D_WIN32_WINNT=0x600 -D_SCL_SECURE_NO_WARNINGS -D_CRT_SECURE_NO_WARNINGS -D_WINSOCK_DEPRECATED_NO_WARNINGS)
     # needed to compile protobuf
     add_definitions(/wd4065 /wd4506)
+    # TODO(jtattermusch): revisit warnings that were silenced as part of upgrade to protobuf3.6.0
+    add_definitions(/wd4200 /wd4291 /wd4244)
     # TODO(jtattermusch): revisit C4267 occurrences throughout the code
     add_definitions(/wd4267)
     # TODO(jtattermusch): needed to build boringssl with VS2017, revisit later
@@ -167,6 +171,7 @@
   include(cmake/gflags.cmake)
   include(cmake/benchmark.cmake)
   include(cmake/address_sorting.cmake)
+  include(cmake/nanopb.cmake)
 
   if(NOT MSVC)
     set(CMAKE_C_FLAGS   "<%text>${CMAKE_C_FLAGS}</%text> -std=c99")
@@ -296,6 +301,11 @@
   if (gRPC_BUILD_TESTS)
   ${cc_library(lib)}
   endif (gRPC_BUILD_TESTS)
+  % elif lib.name in ['grpc_csharp_ext']:
+  if (gRPC_BUILD_CSHARP_EXT)
+  ${cc_library(lib)}
+  ${cc_install(lib)}
+  endif (gRPC_BUILD_CSHARP_EXT)
   % else:
   ${cc_library(lib)}
   % if not lib.build in ["tool"]:
@@ -382,6 +392,7 @@
     PRIVATE <%text>${_gRPC_CARES_INCLUDE_DIR}</%text>
     PRIVATE <%text>${_gRPC_GFLAGS_INCLUDE_DIR}</%text>
     PRIVATE <%text>${_gRPC_ADDRESS_SORTING_INCLUDE_DIR}</%text>
+    PRIVATE <%text>${_gRPC_NANOPB_INCLUDE_DIR}</%text>
   % if lib.build in ['test', 'private'] and lib.language == 'c++':
     PRIVATE third_party/googletest/googletest/include
     PRIVATE third_party/googletest/googletest
@@ -463,6 +474,7 @@
     PRIVATE <%text>${_gRPC_CARES_INCLUDE_DIR}</%text>
     PRIVATE <%text>${_gRPC_GFLAGS_INCLUDE_DIR}</%text>
     PRIVATE <%text>${_gRPC_ADDRESS_SORTING_INCLUDE_DIR}</%text>
+    PRIVATE <%text>${_gRPC_NANOPB_INCLUDE_DIR}</%text>
   % if tgt.build in ['test', 'private'] and tgt.language == 'c++':
     PRIVATE third_party/googletest/googletest/include
     PRIVATE third_party/googletest/googletest
@@ -507,3 +519,6 @@
       DESTINATION <%text>${gRPC_INSTALL_CMAKEDIR}</%text>
     )
   endforeach()
+  
+  install(FILES <%text>${CMAKE_CURRENT_SOURCE_DIR}/etc/roots.pem</%text>
+    DESTINATION <%text>${gRPC_INSTALL_SHAREDIR}</%text>)

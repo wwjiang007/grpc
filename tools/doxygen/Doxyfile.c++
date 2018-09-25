@@ -40,7 +40,7 @@ PROJECT_NAME           = "GRPC C++"
 # could be handy for archiving the generated documentation or if some version
 # control system is used.
 
-PROJECT_NUMBER         = 1.12.0-dev
+PROJECT_NUMBER         = 1.16.0-dev
 
 # Using the PROJECT_BRIEF tag one can provide an optional one line description
 # for a project that appears at the top of each page and should give viewer a
@@ -777,21 +777,23 @@ doc/cpp/perf_notes.md \
 doc/environment_variables.md \
 doc/epoll-polling-engine.md \
 doc/fail_fast.md \
+doc/fork_support.md \
 doc/g_stands_for.md \
 doc/health-checking.md \
 doc/http-grpc-status-mapping.md \
 doc/http2-interop-test-descriptions.md \
 doc/internationalization.md \
 doc/interop-test-descriptions.md \
+doc/keepalive.md \
 doc/load-balancing.md \
 doc/naming.md \
 doc/server-reflection.md \
 doc/server_reflection_tutorial.md \
 doc/server_side_auth.md \
 doc/service_config.md \
+doc/ssl-performance.md \
 doc/status_ordering.md \
 doc/statuscodes.md \
-doc/stress_test_framework.md \
 doc/unit_testing.md \
 doc/wait-for-ready.md \
 doc/workarounds.md \
@@ -891,6 +893,7 @@ include/grpc/impl/codegen/fork.h \
 include/grpc/impl/codegen/gpr_slice.h \
 include/grpc/impl/codegen/gpr_types.h \
 include/grpc/impl/codegen/grpc_types.h \
+include/grpc/impl/codegen/log.h \
 include/grpc/impl/codegen/port_platform.h \
 include/grpc/impl/codegen/propagation_bits.h \
 include/grpc/impl/codegen/slice.h \
@@ -936,12 +939,15 @@ include/grpcpp/health_check_service_interface.h \
 include/grpcpp/impl/call.h \
 include/grpcpp/impl/channel_argument_option.h \
 include/grpcpp/impl/client_unary_call.h \
+include/grpcpp/impl/codegen/async_generic_service.h \
 include/grpcpp/impl/codegen/async_stream.h \
 include/grpcpp/impl/codegen/async_unary_call.h \
 include/grpcpp/impl/codegen/byte_buffer.h \
 include/grpcpp/impl/codegen/call.h \
 include/grpcpp/impl/codegen/call_hook.h \
+include/grpcpp/impl/codegen/callback_common.h \
 include/grpcpp/impl/codegen/channel_interface.h \
+include/grpcpp/impl/codegen/client_callback.h \
 include/grpcpp/impl/codegen/client_context.h \
 include/grpcpp/impl/codegen/client_unary_call.h \
 include/grpcpp/impl/codegen/completion_queue.h \
@@ -993,6 +999,7 @@ include/grpcpp/support/async_stream.h \
 include/grpcpp/support/async_unary_call.h \
 include/grpcpp/support/byte_buffer.h \
 include/grpcpp/support/channel_arguments.h \
+include/grpcpp/support/client_callback.h \
 include/grpcpp/support/config.h \
 include/grpcpp/support/proto_buffer_reader.h \
 include/grpcpp/support/proto_buffer_writer.h \

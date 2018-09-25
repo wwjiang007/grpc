@@ -23,7 +23,16 @@ var parseArgs = require('minimist');
 var path = require('path');
 var _ = require('lodash');
 var grpc = require('grpc');
-var routeguide = grpc.load(PROTO_PATH).routeguide;
+var protoLoader = require('@grpc/proto-loader');
+var packageDefinition = protoLoader.loadSync(
+    PROTO_PATH,
+    {keepCase: true,
+     longs: String,
+     enums: String,
+     defaults: true,
+     oneofs: true
+    });
+var routeguide = grpc.loadPackageDefinition(packageDefinition).routeguide;
 
 var COORD_FACTOR = 1e7;
 
@@ -122,7 +131,7 @@ function getDistance(start, end) {
   var deltalon = lon2-lon1;
   var a = Math.sin(deltalat/2) * Math.sin(deltalat/2) +
       Math.cos(lat1) * Math.cos(lat2) *
-      Math.sin(dlon/2) * Math.sin(dlon/2);
+      Math.sin(deltalon/2) * Math.sin(deltalon/2);
   var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
   return R * c;
 }
