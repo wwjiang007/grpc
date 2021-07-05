@@ -52,7 +52,7 @@ static void RunQPS() {
 
   const auto result =
       RunScenario(client_config, 1, server_config, 1, WARMUP, BENCHMARK, -2, "",
-                  kInsecureCredentialsType, false, 0);
+                  kInsecureCredentialsType, {}, false, 0);
 
   GetReporter()->ReportQPSPerCore(*result);
   GetReporter()->ReportLatency(*result);
@@ -62,6 +62,7 @@ static void RunQPS() {
 }  // namespace grpc
 
 int main(int argc, char** argv) {
+  grpc::testing::TestEnvironment env(argc, argv);
   grpc::testing::InitTest(&argc, &argv, true);
 
   grpc::testing::RunQPS();

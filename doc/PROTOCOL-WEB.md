@@ -17,7 +17,7 @@ with the protocol details specified in the
 For the gRPC-Web protocol, we have decided on the following design goals:
 
 * adopt the same framing as “application/grpc” whenever possible
-* decouple from HTTP/2 framing which is not, and will never, be directly
+* decouple from HTTP/2 framing which is not, and will never be, directly
 exposed by browsers
 * support text streams (e.g. base64) in order to provide cross-browser
 support (e.g. IE-10)
@@ -132,10 +132,10 @@ finalized and implemented in modern browsers
 
 Versioning
 
-* Special headers may be introduced to support features that may break compatiblity.
+* Special headers may be introduced to support features that may break compatibility.
 
 ---
 
 Browser-specific features
-
-* For features that are unique to browser or HTML clients, check the [spec doc](https://github.com/grpc/grpc-web/blob/master/BROWSER-FEATURES.md) published in the grpc/grpc-web repo.
+                                                                                
+* For features that are unique to browser or HTML clients, check the [spec doc](https://github.com/grpc/grpc-web/blob/master/doc/browser-features.md) published in the grpc/grpc-web repo.

@@ -31,10 +31,9 @@ namespace grpc {
 /// Implementation of the core codegen interface.
 class CoreCodegen final : public CoreCodegenInterface {
  private:
-  virtual const grpc_completion_queue_factory*
-  grpc_completion_queue_factory_lookup(
+  const grpc_completion_queue_factory* grpc_completion_queue_factory_lookup(
       const grpc_completion_queue_attributes* attributes) override;
-  virtual grpc_completion_queue* grpc_completion_queue_create(
+  grpc_completion_queue* grpc_completion_queue_create(
       const grpc_completion_queue_factory* factory,
       const grpc_completion_queue_attributes* attributes,
       void* reserved) override;
@@ -42,6 +41,7 @@ class CoreCodegen final : public CoreCodegenInterface {
       void* reserved) override;
   grpc_completion_queue* grpc_completion_queue_create_for_pluck(
       void* reserved) override;
+  void grpc_completion_queue_shutdown(grpc_completion_queue* cq) override;
   void grpc_completion_queue_destroy(grpc_completion_queue* cq) override;
   grpc_event grpc_completion_queue_pluck(grpc_completion_queue* cq, void* tag,
                                          gpr_timespec deadline,
@@ -63,13 +63,17 @@ class CoreCodegen final : public CoreCodegenInterface {
   void gpr_cv_signal(gpr_cv* cv) override;
   void gpr_cv_broadcast(gpr_cv* cv) override;
 
+  grpc_call_error grpc_call_start_batch(grpc_call* call, const grpc_op* ops,
+                                        size_t nops, void* tag,
+                                        void* reserved) override;
   grpc_call_error grpc_call_cancel_with_status(grpc_call* call,
                                                grpc_status_code status,
                                                const char* description,
                                                void* reserved) override;
   void grpc_call_ref(grpc_call* call) override;
   void grpc_call_unref(grpc_call* call) override;
-  virtual void* grpc_call_arena_alloc(grpc_call* call, size_t length) override;
+  void* grpc_call_arena_alloc(grpc_call* call, size_t length) override;
+  const char* grpc_call_error_to_string(grpc_call_error error) override;
 
   grpc_byte_buffer* grpc_byte_buffer_copy(grpc_byte_buffer* bb) override;
   void grpc_byte_buffer_destroy(grpc_byte_buffer* bb) override;
@@ -81,6 +85,8 @@ class CoreCodegen final : public CoreCodegenInterface {
       grpc_byte_buffer_reader* reader) override;
   int grpc_byte_buffer_reader_next(grpc_byte_buffer_reader* reader,
                                    grpc_slice* slice) override;
+  int grpc_byte_buffer_reader_peek(grpc_byte_buffer_reader* reader,
+                                   grpc_slice** slice) override;
 
   grpc_byte_buffer* grpc_raw_byte_buffer_create(grpc_slice* slice,
                                                 size_t nslices) override;
@@ -108,8 +114,8 @@ class CoreCodegen final : public CoreCodegenInterface {
   gpr_timespec gpr_inf_future(gpr_clock_type type) override;
   gpr_timespec gpr_time_0(gpr_clock_type type) override;
 
-  virtual const Status& ok() override;
-  virtual const Status& cancelled() override;
+  const Status& ok() override;
+  const Status& cancelled() override;
 
   void assert_fail(const char* failed_assertion, const char* file,
                    int line) override;

@@ -35,7 +35,7 @@
 #include "src/core/ext/filters/http/server/http_server_filter.h"
 #include "src/core/ext/transport/chttp2/transport/chttp2_transport.h"
 #include "src/core/lib/channel/connected_channel.h"
-#include "src/core/lib/gpr/env.h"
+#include "src/core/lib/debug/trace.h"
 #include "src/core/lib/iomgr/endpoint_pair.h"
 #include "src/core/lib/iomgr/iomgr.h"
 #include "src/core/lib/surface/channel.h"
@@ -52,8 +52,14 @@ static void server_setup_transport(void* ts, grpc_transport* transport) {
   grpc_core::ExecCtx exec_ctx;
   grpc_endpoint_pair* sfd = static_cast<grpc_endpoint_pair*>(f->fixture_data);
   grpc_endpoint_add_to_pollset(sfd->server, grpc_cq_pollset(f->cq));
-  grpc_server_setup_transport(f->server, transport, nullptr,
-                              grpc_server_get_channel_args(f->server));
+  grpc_error_handle error = f->server->core_server->SetupTransport(
+      transport, nullptr, f->server->core_server->channel_args(), nullptr);
+  if (error == GRPC_ERROR_NONE) {
+    grpc_chttp2_transport_start_reading(transport, nullptr, nullptr, nullptr);
+  } else {
+    GRPC_ERROR_UNREF(error);
+    grpc_transport_destroy(transport);
+  }
 }
 
 typedef struct {
@@ -68,13 +74,28 @@ static void client_setup_transport(void* ts, grpc_transport* transport) {
       const_cast<char*>("test-authority"));
   grpc_channel_args* args =
       grpc_channel_args_copy_and_add(cs->client_args, &authority_arg, 1);
-  cs->f->client = grpc_channel_create("socketpair-target", args,
-                                      GRPC_CLIENT_DIRECT_CHANNEL, transport);
+  grpc_error_handle error = GRPC_ERROR_NONE;
+  cs->f->client =
+      grpc_channel_create("socketpair-target", args, GRPC_CLIENT_DIRECT_CHANNEL,
+                          transport, nullptr, &error);
   grpc_channel_args_destroy(args);
+  if (cs->f->client != nullptr) {
+    grpc_chttp2_transport_start_reading(transport, nullptr, nullptr, nullptr);
+  } else {
+    intptr_t integer;
+    grpc_status_code status = GRPC_STATUS_INTERNAL;
+    if (grpc_error_get_int(error, GRPC_ERROR_INT_GRPC_STATUS, &integer)) {
+      status = static_cast<grpc_status_code>(integer);
+    }
+    GRPC_ERROR_UNREF(error);
+    cs->f->client =
+        grpc_lame_client_channel_create(nullptr, status, "lame channel");
+    grpc_transport_destroy(transport);
+  }
 }
 
 static grpc_end2end_test_fixture chttp2_create_fixture_socketpair(
-    grpc_channel_args* client_args, grpc_channel_args* server_args) {
+    grpc_channel_args* /*client_args*/, grpc_channel_args* /*server_args*/) {
   grpc_endpoint_pair* sfd =
       static_cast<grpc_endpoint_pair*>(gpr_malloc(sizeof(grpc_endpoint_pair)));
 
@@ -100,7 +121,6 @@ static void chttp2_init_client_socketpair(grpc_end2end_test_fixture* f,
   transport = grpc_create_chttp2_transport(client_args, sfd->client, true);
   client_setup_transport(&cs, transport);
   GPR_ASSERT(f->client);
-  grpc_chttp2_transport_start_reading(transport, nullptr, nullptr);
 }
 
 static void chttp2_init_server_socketpair(grpc_end2end_test_fixture* f,
@@ -114,7 +134,6 @@ static void chttp2_init_server_socketpair(grpc_end2end_test_fixture* f,
   grpc_server_start(f->server);
   transport = grpc_create_chttp2_transport(server_args, sfd->server, false);
   server_setup_transport(f, transport);
-  grpc_chttp2_transport_start_reading(transport, nullptr, nullptr);
 }
 
 static void chttp2_tear_down_socketpair(grpc_end2end_test_fixture* f) {
@@ -133,14 +152,24 @@ int main(int argc, char** argv) {
 
   /* force tracing on, with a value to force many
      code paths in trace.c to be taken */
-  gpr_setenv("GRPC_TRACE", "doesnt-exist,http,all");
+  GPR_GLOBAL_CONFIG_SET(grpc_trace, "doesnt-exist,http,all");
+
 #ifdef GRPC_POSIX_SOCKET
   g_fixture_slowdown_factor = isatty(STDOUT_FILENO) ? 10 : 1;
 #else
   g_fixture_slowdown_factor = 10;
 #endif
 
-  grpc_test_init(argc, argv);
+#ifdef GPR_WINDOWS
+  /* on Windows, writing logs to stderr is very slow
+     when stderr is redirected to a disk file.
+     The "trace" tests fixtures generates large amount
+     of logs, so setting a buffer for stderr prevents certain
+     test cases from timing out. */
+  setvbuf(stderr, NULL, _IOLBF, 1024);
+#endif
+
+  grpc::testing::TestEnvironment env(argc, argv);
   grpc_end2end_tests_pre_init();
   grpc_init();
 

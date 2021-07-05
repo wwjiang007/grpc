@@ -1,6 +1,23 @@
+load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
+
 config_setting(
     name = "darwin",
     values = {"cpu": "darwin"},
+)
+
+config_setting(
+    name = "darwin_x86_64",
+    values = {"cpu": "darwin_x86_64"},
+)
+
+config_setting(
+    name = "darwin_arm64",
+    values = {"cpu": "darwin_arm64"},
+)
+
+config_setting(
+    name = "darwin_arm64e",
+    values = {"cpu": "darwin_arm64e"},
 )
 
 config_setting(
@@ -39,27 +56,66 @@ config_setting(
     values = {"cpu": "ios_arm64"},
 )
 
-genrule(
-    name = "ares_build_h",
-    srcs = ["@com_github_grpc_grpc//third_party/cares:ares_build.h"],
-    outs = ["ares_build.h"],
-    cmd = "cat $< > $@",
+# The following architectures are found in 
+# https://github.com/bazelbuild/bazel/blob/master/src/main/java/com/google/devtools/build/lib/rules/apple/ApplePlatform.java
+config_setting(
+    name = "tvos_x86_64",
+    values = {"cpu": "tvos_x86_64"},
 )
 
-genrule(
+config_setting(
+    name = "tvos_arm64",
+    values = {"cpu": "tvos_arm64"}
+)
+
+config_setting(
+    name = "watchos_i386",
+    values = {"cpu": "watchos_i386"},
+)
+
+config_setting(
+    name = "watchos_x86_64",
+    values = {"cpu": "watchos_x86_64"}
+)
+
+config_setting(
+    name = "watchos_armv7k",
+    values = {"cpu": "watchos_armv7k"},
+)
+
+config_setting(
+    name = "watchos_arm64_32",
+    values = {"cpu": "watchos_arm64_32"}
+)
+
+copy_file(
+    name = "ares_build_h",
+    src = "@com_github_grpc_grpc//third_party/cares:ares_build.h",
+    out = "ares_build.h",
+)
+
+copy_file(
     name = "ares_config_h",
-    srcs = select({
-        ":ios_x86_64": ["@com_github_grpc_grpc//third_party/cares:config_darwin/ares_config.h"],
-        ":ios_armv7": ["@com_github_grpc_grpc//third_party/cares:config_darwin/ares_config.h"],
-        ":ios_armv7s": ["@com_github_grpc_grpc//third_party/cares:config_darwin/ares_config.h"],
-        ":ios_arm64": ["@com_github_grpc_grpc//third_party/cares:config_darwin/ares_config.h"],
-        ":darwin": ["@com_github_grpc_grpc//third_party/cares:config_darwin/ares_config.h"],
-        ":windows": ["@com_github_grpc_grpc//third_party/cares:config_windows/ares_config.h"],
-        ":android": ["@com_github_grpc_grpc//third_party/cares:config_android/ares_config.h"],
-        "//conditions:default": ["@com_github_grpc_grpc//third_party/cares:config_linux/ares_config.h"],
+    src = select({
+        ":ios_x86_64": "@com_github_grpc_grpc//third_party/cares:config_darwin/ares_config.h",
+        ":ios_armv7": "@com_github_grpc_grpc//third_party/cares:config_darwin/ares_config.h",
+        ":ios_armv7s": "@com_github_grpc_grpc//third_party/cares:config_darwin/ares_config.h",
+        ":ios_arm64": "@com_github_grpc_grpc//third_party/cares:config_darwin/ares_config.h",
+        ":tvos_x86_64": "@com_github_grpc_grpc//third_party/cares:config_darwin/ares_config.h",
+        ":tvos_arm64": "@com_github_grpc_grpc//third_party/cares:config_darwin/ares_config.h",
+        ":watchos_i386": "@com_github_grpc_grpc//third_party/cares:config_darwin/ares_config.h",
+        ":watchos_x86_64": "@com_github_grpc_grpc//third_party/cares:config_darwin/ares_config.h",
+        ":watchos_armv7k": "@com_github_grpc_grpc//third_party/cares:config_darwin/ares_config.h",
+        ":watchos_arm64_32": "@com_github_grpc_grpc//third_party/cares:config_darwin/ares_config.h",
+        ":darwin": "@com_github_grpc_grpc//third_party/cares:config_darwin/ares_config.h",
+        ":darwin_x86_64": "@com_github_grpc_grpc//third_party/cares:config_darwin/ares_config.h",
+        ":darwin_arm64": "@com_github_grpc_grpc//third_party/cares:config_darwin/ares_config.h",
+        ":darwin_arm64e": "@com_github_grpc_grpc//third_party/cares:config_darwin/ares_config.h",
+        ":windows": "@com_github_grpc_grpc//third_party/cares:config_windows/ares_config.h",
+        ":android": "@com_github_grpc_grpc//third_party/cares:config_android/ares_config.h",
+        "//conditions:default": "@com_github_grpc_grpc//third_party/cares:config_linux/ares_config.h",
     }),
-    outs = ["ares_config.h"],
-    cmd = "cat $< > $@",
+    out = "ares_config.h",
 )
 
 cc_library(
@@ -69,6 +125,7 @@ cc_library(
         "ares__get_hostent.c",
         "ares__read_line.c",
         "ares__timeval.c",
+        "ares_android.c",
         "ares_cancel.c",
         "ares_create_query.c",
         "ares_data.c",
@@ -106,6 +163,7 @@ cc_library(
         "ares_send.c",
         "ares_strcasecmp.c",
         "ares_strdup.c",
+        "ares_strsplit.c",
         "ares_strerror.c",
         "ares_timeout.c",
         "ares_version.c",
@@ -117,6 +175,7 @@ cc_library(
     ],
     hdrs = [
         "ares.h",
+        "ares_android.h",
         "ares_build.h",
         "ares_config.h",
         "ares_data.h",
@@ -135,7 +194,9 @@ cc_library(
         "ares_setup.h",
         "ares_strcasecmp.h",
         "ares_strdup.h",
+        "ares_strsplit.h",
         "ares_version.h",
+        "ares_writev.h",
         "bitncmp.h",
         "config-win32.h",
         "nameser.h",
@@ -164,4 +225,5 @@ cc_library(
     visibility = [
         "//visibility:public",
     ],
+    alwayslink = 1,
 )

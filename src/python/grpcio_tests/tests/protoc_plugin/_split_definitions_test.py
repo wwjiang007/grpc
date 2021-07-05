@@ -142,9 +142,10 @@ class _ProtoBeforeGrpcProtocStyle(object):
     def protoc(self, proto_path, python_out, absolute_proto_file_names):
         pb2_protoc_exit_code = _protoc(proto_path, python_out, None, None,
                                        absolute_proto_file_names)
-        pb2_grpc_protoc_exit_code = _protoc(
-            proto_path, None, 'grpc_2_0', python_out, absolute_proto_file_names)
-        return pb2_protoc_exit_code, pb2_grpc_protoc_exit_code,
+        pb2_grpc_protoc_exit_code = _protoc(proto_path, None, 'grpc_2_0',
+                                            python_out,
+                                            absolute_proto_file_names)
+        return pb2_protoc_exit_code, pb2_grpc_protoc_exit_code
 
 
 class _GrpcBeforeProtoProtocStyle(object):
@@ -156,11 +157,12 @@ class _GrpcBeforeProtoProtocStyle(object):
         return False
 
     def protoc(self, proto_path, python_out, absolute_proto_file_names):
-        pb2_grpc_protoc_exit_code = _protoc(
-            proto_path, None, 'grpc_2_0', python_out, absolute_proto_file_names)
+        pb2_grpc_protoc_exit_code = _protoc(proto_path, None, 'grpc_2_0',
+                                            python_out,
+                                            absolute_proto_file_names)
         pb2_protoc_exit_code = _protoc(proto_path, python_out, None, None,
                                        absolute_proto_file_names)
-        return pb2_grpc_protoc_exit_code, pb2_protoc_exit_code,
+        return pb2_grpc_protoc_exit_code, pb2_protoc_exit_code
 
 
 _PROTOC_STYLES = (
@@ -196,10 +198,10 @@ class _Test(six.with_metaclass(abc.ABCMeta, unittest.TestCase)):
         messages_proto_relative_file_name_forward_slashes = '/'.join(
             self.MESSAGES_PROTO_RELATIVE_DIRECTORY_NAMES +
             (self.MESSAGES_PROTO_FILE_NAME,))
-        _create_directory_tree(self._proto_path,
-                               (relative_proto_directory_names
-                                for relative_proto_directory_names, _ in
-                                proto_directories_and_names))
+        _create_directory_tree(
+            self._proto_path,
+            (relative_proto_directory_names for relative_proto_directory_names,
+             _ in proto_directories_and_names))
         self._absolute_proto_file_names = set()
         for relative_directory_names, file_name in proto_directories_and_names:
             absolute_proto_file_name = path.join(
@@ -243,9 +245,9 @@ class _Test(six.with_metaclass(abc.ABCMeta, unittest.TestCase)):
 
     def _services_modules(self):
         if self.PROTOC_STYLE.grpc_in_pb2_expected():
-            return self._services_pb2, self._services_pb2_grpc,
+            return self._services_pb2, self._services_pb2_grpc
         else:
-            return self._services_pb2_grpc,
+            return (self._services_pb2_grpc,)
 
     def test_imported_attributes(self):
         self._protoc()

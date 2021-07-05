@@ -14,11 +14,27 @@
 
 licenses(["notice"])  # Apache v2
 
-load("//bazel:grpc_build_system.bzl", "grpc_proto_library", "grpc_package")
+load("@rules_proto//proto:defs.bzl", "proto_library")
+load("//bazel:grpc_build_system.bzl", "grpc_package", "grpc_proto_library")
 
-grpc_package(name = "reflection", visibility = "public")
+grpc_package(
+    name = "reflection",
+    visibility = "public",
+)
 
 grpc_proto_library(
     name = "reflection_proto",
     srcs = ["reflection.proto"],
+)
+
+proto_library(
+    name = "reflection_proto_descriptor",
+    srcs = ["reflection.proto"],
+)
+
+filegroup(
+    name = "reflection_proto_file",
+    srcs = [
+        "reflection.proto",
+    ],
 )

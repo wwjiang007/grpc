@@ -19,6 +19,8 @@
 #ifndef GRPCPP_IMPL_CODEGEN_METADATA_MAP_H
 #define GRPCPP_IMPL_CODEGEN_METADATA_MAP_H
 
+#include <map>
+
 #include <grpc/impl/codegen/log.h>
 #include <grpcpp/impl/codegen/slice.h>
 
@@ -30,18 +32,16 @@ const char kBinaryErrorDetailsKey[] = "grpc-status-details-bin";
 
 class MetadataMap {
  public:
-  MetadataMap() { memset(&arr_, 0, sizeof(arr_)); }
+  MetadataMap() { Setup(); }
 
-  ~MetadataMap() {
-    g_core_codegen_interface->grpc_metadata_array_destroy(&arr_);
-  }
+  ~MetadataMap() { Destroy(); }
 
-  grpc::string GetBinaryErrorDetails() {
+  std::string GetBinaryErrorDetails() {
     // if filled_, extract from the multimap for O(log(n))
     if (filled_) {
       auto iter = map_.find(kBinaryErrorDetailsKey);
       if (iter != map_.end()) {
-        return grpc::string(iter->second.begin(), iter->second.length());
+        return std::string(iter->second.begin(), iter->second.length());
       }
     }
     // if not yet filled, take the O(n) lookup to avoid allocating the
@@ -54,13 +54,13 @@ class MetadataMap {
                         GRPC_SLICE_START_PTR(arr_.metadata[i].key)),
                     kBinaryErrorDetailsKey,
                     GRPC_SLICE_LENGTH(arr_.metadata[i].key)) == 0) {
-          return grpc::string(reinterpret_cast<const char*>(
-                                  GRPC_SLICE_START_PTR(arr_.metadata[i].value)),
-                              GRPC_SLICE_LENGTH(arr_.metadata[i].value));
+          return std::string(reinterpret_cast<const char*>(
+                                 GRPC_SLICE_START_PTR(arr_.metadata[i].value)),
+                             GRPC_SLICE_LENGTH(arr_.metadata[i].value));
         }
       }
     }
-    return grpc::string();
+    return std::string();
   }
 
   std::multimap<grpc::string_ref, grpc::string_ref>* map() {
@@ -69,10 +69,23 @@ class MetadataMap {
   }
   grpc_metadata_array* arr() { return &arr_; }
 
+  void Reset() {
+    filled_ = false;
+    map_.clear();
+    Destroy();
+    Setup();
+  }
+
  private:
   bool filled_ = false;
   grpc_metadata_array arr_;
   std::multimap<grpc::string_ref, grpc::string_ref> map_;
+
+  void Destroy() {
+    g_core_codegen_interface->grpc_metadata_array_destroy(&arr_);
+  }
+
+  void Setup() { memset(&arr_, 0, sizeof(arr_)); }
 
   void FillMap() {
     if (filled_) return;

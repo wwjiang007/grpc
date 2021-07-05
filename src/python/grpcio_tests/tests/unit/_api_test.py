@@ -14,6 +14,7 @@
 """Test of gRPC Python's application-layer API."""
 
 import unittest
+import logging
 
 import six
 
@@ -30,7 +31,9 @@ class AllTest(unittest.TestCase):
             'FutureCancelledError',
             'Future',
             'ChannelConnectivity',
+            'Compression',
             'StatusCode',
+            'Status',
             'RpcError',
             'RpcContext',
             'Call',
@@ -57,6 +60,11 @@ class AllTest(unittest.TestCase):
             'ServiceRpcHandler',
             'Server',
             'ServerInterceptor',
+            'LocalConnectionType',
+            'local_channel_credentials',
+            'local_server_credentials',
+            'alts_channel_credentials',
+            'alts_server_credentials',
             'unary_unary_rpc_method_handler',
             'unary_stream_rpc_method_handler',
             'stream_unary_rpc_method_handler',
@@ -76,6 +84,12 @@ class AllTest(unittest.TestCase):
             'secure_channel',
             'intercept_channel',
             'server',
+            'protos',
+            'services',
+            'protos_and_services',
+            'xds_channel_credentials',
+            'xds_server_credentials',
+            'insecure_server_credentials',
         )
 
         six.assertCountEqual(self, expected_grpc_code_elements,
@@ -99,7 +113,9 @@ class ChannelTest(unittest.TestCase):
     def test_secure_channel(self):
         channel_credentials = grpc.ssl_channel_credentials()
         channel = grpc.secure_channel('google.com:443', channel_credentials)
+        channel.close()
 
 
 if __name__ == '__main__':
+    logging.basicConfig()
     unittest.main(verbosity=2)

@@ -1,5 +1,4 @@
-#!/usr/bin/env python2.7
-
+#!/usr/bin/env python3
 # Copyright 2017 gRPC authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -27,4 +26,4 @@ import python_utils.start_port_server as start_port_server
 
 start_port_server.start_port_server()
 
-print "Port server started successfully"
+print("Port server started successfully")

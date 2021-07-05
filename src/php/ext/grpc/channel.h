@@ -19,7 +19,14 @@
 #ifndef NET_GRPC_PHP_GRPC_CHANNEL_H_
 #define NET_GRPC_PHP_GRPC_CHANNEL_H_
 
+#include "channel_credentials.h"
 #include "php_grpc.h"
+
+#if PHP_MAJOR_VERSION >= 8
+#define ZEND_HASH_INIT(hash_table, limit, descriptor, zend_bool) _zend_hash_init(hash_table, limit, descriptor, zend_bool);
+#else
+#define ZEND_HASH_INIT(hash_table, limit, descriptor, zend_bool) zend_hash_init_ex(hash_table, limit, NULL, descriptor, zend_bool, 0);
+#endif
 
 /* Class entry for the PHP Channel class */
 extern zend_class_entry *grpc_ce_channel;
@@ -32,6 +39,8 @@ typedef struct _grpc_channel_wrapper {
   char *creds_hashstr;
   size_t ref_count;
   gpr_mu mu;
+  grpc_channel_args args;
+  wrapped_grpc_channel_credentials *creds;
 } grpc_channel_wrapper;
 
 /* Wrapper struct for grpc_channel that can be associated with a PHP object */

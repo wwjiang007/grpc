@@ -21,11 +21,14 @@
 
 #include <grpc/impl/codegen/port_platform.h>
 
+#include <stdint.h>
+
+#include <map>
+#include <string>
+
 #include "src/core/lib/channel/channel_trace.h"
 #include "src/core/lib/channel/channelz.h"
-#include "src/core/lib/gprpp/inlined_vector.h"
-
-#include <stdint.h>
+#include "src/core/lib/gprpp/sync.h"
 
 namespace grpc_core {
 namespace channelz {
@@ -40,36 +43,36 @@ class ChannelzRegistry {
   // To be called in grpc_shutdown();
   static void Shutdown();
 
-  static intptr_t Register(BaseNode* node) {
+  static void Register(BaseNode* node) {
     return Default()->InternalRegister(node);
   }
   static void Unregister(intptr_t uuid) { Default()->InternalUnregister(uuid); }
-  static BaseNode* Get(intptr_t uuid) { return Default()->InternalGet(uuid); }
+  static RefCountedPtr<BaseNode> Get(intptr_t uuid) {
+    return Default()->InternalGet(uuid);
+  }
 
   // Returns the allocated JSON string that represents the proto
   // GetTopChannelsResponse as per channelz.proto.
-  static char* GetTopChannels(intptr_t start_channel_id) {
+  static std::string GetTopChannels(intptr_t start_channel_id) {
     return Default()->InternalGetTopChannels(start_channel_id);
   }
 
   // Returns the allocated JSON string that represents the proto
   // GetServersResponse as per channelz.proto.
-  static char* GetServers(intptr_t start_server_id) {
+  static std::string GetServers(intptr_t start_server_id) {
     return Default()->InternalGetServers(start_server_id);
   }
 
+  // Test only helper function to dump the JSON representation to std out.
+  // This can aid in debugging channelz code.
+  static void LogAllEntities() { Default()->InternalLogAllEntities(); }
+
  private:
-  GPRC_ALLOW_CLASS_TO_USE_NON_PUBLIC_NEW
-  GPRC_ALLOW_CLASS_TO_USE_NON_PUBLIC_DELETE
-
-  ChannelzRegistry();
-  ~ChannelzRegistry();
-
   // Returned the singleton instance of ChannelzRegistry;
   static ChannelzRegistry* Default();
 
   // globally registers an Entry. Returns its unique uuid
-  intptr_t InternalRegister(BaseNode* node);
+  void InternalRegister(BaseNode* node);
 
   // globally unregisters the object that is associated to uuid. Also does
   // sanity check that an object doesn't try to unregister the wrong type.
@@ -77,14 +80,17 @@ class ChannelzRegistry {
 
   // if object with uuid has previously been registered as the correct type,
   // returns the void* associated with that uuid. Else returns nullptr.
-  BaseNode* InternalGet(intptr_t uuid);
+  RefCountedPtr<BaseNode> InternalGet(intptr_t uuid);
 
-  char* InternalGetTopChannels(intptr_t start_channel_id);
-  char* InternalGetServers(intptr_t start_server_id);
+  std::string InternalGetTopChannels(intptr_t start_channel_id);
+  std::string InternalGetServers(intptr_t start_server_id);
 
-  // protects entities_ and uuid_
-  gpr_mu mu_;
-  InlinedVector<BaseNode*, 20> entities_;
+  void InternalLogAllEntities();
+
+  // protects members
+  Mutex mu_;
+  std::map<intptr_t, BaseNode*> node_map_;
+  intptr_t uuid_generator_ = 0;
 };
 
 }  // namespace channelz

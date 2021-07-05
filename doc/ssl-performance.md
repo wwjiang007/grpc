@@ -25,7 +25,10 @@ In addition, we are shipping packages for language implementations. These packag
 
 Language | From source | Platform | Uses assembly optimizations
 ---|---|---|---
-C#      | n/a | all | :x:
+C#      | n/a | Linux, 64bit | :heavy_check_mark:
+C#      | n/a | Linux, 32bit | :x:
+C#      | n/a | MacOS | :heavy_check_mark:
+C#      | n/a | Windows | :heavy_check_mark:
 Node.JS | n/a | Linux | :heavy_check_mark:
 Node.JS | n/a | MacOS | :heavy_check_mark:
 Node.JS | n/a | Windows | :x:
@@ -33,6 +36,9 @@ Electron | n/a | all | :heavy_check_mark:
 ObjC | Yes | iOS | :x:
 PHP | Yes | all | Same as the `Makefile` case from above
 PHP | No | all | :x:
-Python | n/a | all | :x:
+Python | n/a | Linux, 64bit | :heavy_check_mark:
+Python | n/a | Linux, 32bit | :x:
+Python | n/a | MacOS, 64bit | :heavy_check_mark:
+Python | n/a | MacOS, 32bit | :x:
+Python | n/a | Windows | :x:
 Ruby | No | all | :x:
-

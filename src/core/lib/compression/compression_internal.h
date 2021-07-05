@@ -21,7 +21,10 @@
 
 #include <grpc/support/port_platform.h>
 
-#include <grpc/impl/codegen/compression_types.h>
+#include <grpc/compression.h>
+#include <grpc/slice.h>
+
+#include "src/core/lib/gpr/useful.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -35,7 +38,7 @@ typedef enum {
   GRPC_MESSAGE_COMPRESS_ALGORITHMS_COUNT
 } grpc_message_compression_algorithm;
 
-/** Stream compresssion algorithms supported by gRPC */
+/** Stream compression algorithms supported by gRPC */
 typedef enum {
   GRPC_STREAM_COMPRESS_NONE = 0,
   GRPC_STREAM_COMPRESS_GZIP,
@@ -84,5 +87,11 @@ int grpc_stream_compression_algorithm_parse(
 #ifdef __cplusplus
 }
 #endif
+
+inline int grpc_compression_options_is_algorithm_enabled_internal(
+    const grpc_compression_options* opts,
+    grpc_compression_algorithm algorithm) {
+  return GPR_BITGET(opts->enabled_algorithms_bitset, algorithm);
+}
 
 #endif /* GRPC_CORE_LIB_COMPRESSION_COMPRESSION_INTERNAL_H */

@@ -12,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-cimport cpython
-
 
 cdef class Call:
 
@@ -85,9 +83,10 @@ cdef class Call:
     return result
 
   def __dealloc__(self):
-    if self.c_call != NULL:
-      grpc_call_unref(self.c_call)
-    grpc_shutdown()
+    with nogil:
+      if self.c_call != NULL:
+        grpc_call_unref(self.c_call)
+      grpc_shutdown()
 
   # The object *should* always be valid from Python. Used for debugging.
   @property

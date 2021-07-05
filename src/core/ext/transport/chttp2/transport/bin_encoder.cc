@@ -28,11 +28,10 @@
 static const char alphabet[] =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
-typedef struct {
+struct b64_huff_sym {
   uint16_t bits;
   uint8_t length;
-} b64_huff_sym;
-
+};
 static const b64_huff_sym huff_alphabet[64] = {
     {0x21, 6}, {0x5d, 7}, {0x5e, 7},   {0x5f, 7}, {0x60, 7}, {0x61, 7},
     {0x62, 7}, {0x63, 7}, {0x64, 7},   {0x65, 7}, {0x66, 7}, {0x67, 7},
@@ -48,13 +47,13 @@ static const b64_huff_sym huff_alphabet[64] = {
 
 static const uint8_t tail_xtra[3] = {0, 2, 3};
 
-grpc_slice grpc_chttp2_base64_encode(grpc_slice input) {
+grpc_slice grpc_chttp2_base64_encode(const grpc_slice& input) {
   size_t input_length = GRPC_SLICE_LENGTH(input);
   size_t input_triplets = input_length / 3;
   size_t tail_case = input_length % 3;
   size_t output_length = input_triplets * 4 + tail_xtra[tail_case];
   grpc_slice output = GRPC_SLICE_MALLOC(output_length);
-  uint8_t* in = GRPC_SLICE_START_PTR(input);
+  const uint8_t* in = GRPC_SLICE_START_PTR(input);
   char* out = reinterpret_cast<char*> GRPC_SLICE_START_PTR(output);
   size_t i;
 
@@ -92,9 +91,9 @@ grpc_slice grpc_chttp2_base64_encode(grpc_slice input) {
   return output;
 }
 
-grpc_slice grpc_chttp2_huffman_compress(grpc_slice input) {
+grpc_slice grpc_chttp2_huffman_compress(const grpc_slice& input) {
   size_t nbits;
-  uint8_t* in;
+  const uint8_t* in;
   uint8_t* out;
   grpc_slice output;
   uint32_t temp = 0;
@@ -136,12 +135,11 @@ grpc_slice grpc_chttp2_huffman_compress(grpc_slice input) {
   return output;
 }
 
-typedef struct {
+struct huff_out {
   uint32_t temp;
   uint32_t temp_length;
   uint8_t* out;
-} huff_out;
-
+};
 static void enc_flush_some(huff_out* out) {
   while (out->temp_length > 8) {
     out->temp_length -= 8;
@@ -166,7 +164,8 @@ static void enc_add1(huff_out* out, uint8_t a) {
   enc_flush_some(out);
 }
 
-grpc_slice grpc_chttp2_base64_encode_and_huffman_compress(grpc_slice input) {
+grpc_slice grpc_chttp2_base64_encode_and_huffman_compress(
+    const grpc_slice& input) {
   size_t input_length = GRPC_SLICE_LENGTH(input);
   size_t input_triplets = input_length / 3;
   size_t tail_case = input_length % 3;
@@ -174,7 +173,7 @@ grpc_slice grpc_chttp2_base64_encode_and_huffman_compress(grpc_slice input) {
   size_t max_output_bits = 11 * output_syms;
   size_t max_output_length = max_output_bits / 8 + (max_output_bits % 8 != 0);
   grpc_slice output = GRPC_SLICE_MALLOC(max_output_length);
-  uint8_t* in = GRPC_SLICE_START_PTR(input);
+  const uint8_t* in = GRPC_SLICE_START_PTR(input);
   uint8_t* start_out = GRPC_SLICE_START_PTR(output);
   huff_out out;
   size_t i;

@@ -14,6 +14,7 @@
 """Common code used throughout tests of gRPC."""
 
 import collections
+import threading
 
 from concurrent import futures
 import grpc
@@ -99,11 +100,35 @@ def test_secure_channel(target, channel_credentials, server_host_override):
     return channel
 
 
-def test_server(max_workers=10):
+def test_server(max_workers=10, reuse_port=False):
     """Creates an insecure grpc server.
 
      These servers have SO_REUSEPORT disabled to prevent cross-talk.
      """
-    return grpc.server(
-        futures.ThreadPoolExecutor(max_workers=max_workers),
-        options=(('grpc.so_reuseport', 0),))
+    return grpc.server(futures.ThreadPoolExecutor(max_workers=max_workers),
+                       options=(('grpc.so_reuseport', int(reuse_port)),))
+
+
+class WaitGroup(object):
+
+    def __init__(self, n=0):
+        self.count = n
+        self.cv = threading.Condition()
+
+    def add(self, n):
+        self.cv.acquire()
+        self.count += n
+        self.cv.release()
+
+    def done(self):
+        self.cv.acquire()
+        self.count -= 1
+        if self.count == 0:
+            self.cv.notify_all()
+        self.cv.release()
+
+    def wait(self):
+        self.cv.acquire()
+        while self.count > 0:
+            self.cv.wait()
+        self.cv.release()

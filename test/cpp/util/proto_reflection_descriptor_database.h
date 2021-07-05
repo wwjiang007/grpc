@@ -40,11 +40,11 @@ class ProtoReflectionDescriptorDatabase : public protobuf::DescriptorDatabase {
   explicit ProtoReflectionDescriptorDatabase(
       const std::shared_ptr<grpc::Channel>& channel);
 
-  virtual ~ProtoReflectionDescriptorDatabase();
+  ~ProtoReflectionDescriptorDatabase() override;
 
   // The following four methods implement DescriptorDatabase interfaces.
   //
-  // Find a file by file name.  Fills in in *output and returns true if found.
+  // Find a file by file name.  Fills in *output and returns true if found.
   // Otherwise, returns false, leaving the contents of *output undefined.
   bool FindFileByName(const string& filename,
                       protobuf::FileDescriptorProto* output) override;
@@ -74,7 +74,7 @@ class ProtoReflectionDescriptorDatabase : public protobuf::DescriptorDatabase {
                                std::vector<int>* output) override;
 
   // Provide a list of full names of registered services
-  bool GetServices(std::vector<grpc::string>* output);
+  bool GetServices(std::vector<std::string>* output);
 
  private:
   typedef ClientReaderWriter<
@@ -82,13 +82,13 @@ class ProtoReflectionDescriptorDatabase : public protobuf::DescriptorDatabase {
       grpc::reflection::v1alpha::ServerReflectionResponse>
       ClientStream;
 
-  const protobuf::FileDescriptorProto ParseFileDescriptorProtoResponse(
-      const grpc::string& byte_fd_proto);
+  protobuf::FileDescriptorProto ParseFileDescriptorProtoResponse(
+      const std::string& byte_fd_proto);
 
   void AddFileFromResponse(
       const grpc::reflection::v1alpha::FileDescriptorResponse& response);
 
-  const std::shared_ptr<ClientStream> GetStream();
+  std::shared_ptr<ClientStream> GetStream();
 
   bool DoOneRequest(
       const grpc::reflection::v1alpha::ServerReflectionRequest& request,

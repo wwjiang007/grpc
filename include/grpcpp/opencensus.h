@@ -1,6 +1,6 @@
 /*
  *
- * Copyright 2018 gRPC authors.
+ * Copyright 2019 gRPC authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,13 +19,10 @@
 #ifndef GRPCPP_OPENCENSUS_H
 #define GRPCPP_OPENCENSUS_H
 
-#ifndef GRPC_BAZEL_BUILD
-#error OpenCensus for gRPC is only supported when building with bazel.
-#endif
-
 #include "opencensus/trace/span.h"
 
 namespace grpc {
+class ServerContext;
 // These symbols in this file will not be included in the binary unless
 // grpc_opencensus_plugin build target was added as a dependency. At the moment
 // it is only setup to be built with Bazel.
@@ -41,8 +38,6 @@ void RegisterOpenCensusPlugin();
 // registered stats exporter. For on-task stats, construct a View using the
 // ViewDescriptors below.
 void RegisterOpenCensusViewsForExport();
-
-class ServerContext;
 
 // Returns the tracing Span for the current RPC.
 ::opencensus::trace::Span GetSpanFromServerContext(ServerContext* context);

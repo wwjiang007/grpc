@@ -14,9 +14,12 @@
 
 licenses(["notice"])  # Apache v2
 
-load("//bazel:grpc_build_system.bzl", "grpc_proto_library", "grpc_cc_library", "grpc_cc_binary", "grpc_package")
+load("//bazel:grpc_build_system.bzl", "grpc_cc_binary", "grpc_cc_library", "grpc_package", "grpc_proto_library")
 
-grpc_package(name = "test/core/tsi/alts/fake_handshaker", visibility = "public")
+grpc_package(
+    name = "test/core/tsi/alts/fake_handshaker",
+    visibility = "public",
+)
 
 grpc_proto_library(
     name = "transport_security_common_proto",
@@ -50,9 +53,13 @@ grpc_cc_binary(
     name = "fake_handshaker_server",
     testonly = True,
     srcs = ["fake_handshaker_server_main.cc"],
+    external_deps = [
+        "absl/flags:flag",
+    ],
     language = "C++",
     deps = [
-        "//test/cpp/util:test_config",
         "fake_handshaker_lib",
+        "//test/core/util:grpc_test_util",
+        "//test/cpp/util:test_config",
     ],
 )

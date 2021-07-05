@@ -107,34 +107,38 @@ static gpr_timespec to_seconds_from_above_second_time(int64_t time_in_units,
   return out;
 }
 
-gpr_timespec gpr_time_from_nanos(int64_t ns, gpr_clock_type type) {
-  return to_seconds_from_sub_second_time(ns, GPR_NS_PER_SEC, type);
+gpr_timespec gpr_time_from_nanos(int64_t ns, gpr_clock_type clock_type) {
+  return to_seconds_from_sub_second_time(ns, GPR_NS_PER_SEC, clock_type);
 }
 
-gpr_timespec gpr_time_from_micros(int64_t us, gpr_clock_type type) {
-  return to_seconds_from_sub_second_time(us, GPR_US_PER_SEC, type);
+gpr_timespec gpr_time_from_micros(int64_t us, gpr_clock_type clock_type) {
+  return to_seconds_from_sub_second_time(us, GPR_US_PER_SEC, clock_type);
 }
 
-gpr_timespec gpr_time_from_millis(int64_t ms, gpr_clock_type type) {
-  return to_seconds_from_sub_second_time(ms, GPR_MS_PER_SEC, type);
+gpr_timespec gpr_time_from_millis(int64_t ms, gpr_clock_type clock_type) {
+  return to_seconds_from_sub_second_time(ms, GPR_MS_PER_SEC, clock_type);
 }
 
-gpr_timespec gpr_time_from_seconds(int64_t s, gpr_clock_type type) {
-  return to_seconds_from_sub_second_time(s, 1, type);
+gpr_timespec gpr_time_from_seconds(int64_t s, gpr_clock_type clock_type) {
+  return to_seconds_from_sub_second_time(s, 1, clock_type);
 }
 
-gpr_timespec gpr_time_from_minutes(int64_t m, gpr_clock_type type) {
-  return to_seconds_from_above_second_time(m, 60, type);
+gpr_timespec gpr_time_from_minutes(int64_t m, gpr_clock_type clock_type) {
+  return to_seconds_from_above_second_time(m, 60, clock_type);
 }
 
-gpr_timespec gpr_time_from_hours(int64_t h, gpr_clock_type type) {
-  return to_seconds_from_above_second_time(h, 3600, type);
+gpr_timespec gpr_time_from_hours(int64_t h, gpr_clock_type clock_type) {
+  return to_seconds_from_above_second_time(h, 3600, clock_type);
 }
 
 gpr_timespec gpr_time_add(gpr_timespec a, gpr_timespec b) {
   gpr_timespec sum;
   int64_t inc = 0;
   GPR_ASSERT(b.clock_type == GPR_TIMESPAN);
+  // tv_nsec in a timespan is always +ve. -ve timespan is represented as (-ve
+  // tv_sec, +ve tv_nsec). For example, timespan = -2.5 seconds is represented
+  // as {-3, 5e8, GPR_TIMESPAN}
+  GPR_ASSERT(b.tv_nsec >= 0);
   sum.clock_type = a.clock_type;
   sum.tv_nsec = a.tv_nsec + b.tv_nsec;
   if (sum.tv_nsec >= GPR_NS_PER_SEC) {
@@ -165,6 +169,10 @@ gpr_timespec gpr_time_sub(gpr_timespec a, gpr_timespec b) {
   int64_t dec = 0;
   if (b.clock_type == GPR_TIMESPAN) {
     diff.clock_type = a.clock_type;
+    // tv_nsec in a timespan is always +ve. -ve timespan is represented as (-ve
+    // tv_sec, +ve tv_nsec). For example, timespan = -2.5 seconds is represented
+    // as {-3, 5e8, GPR_TIMESPAN}
+    GPR_ASSERT(b.tv_nsec >= 0);
   } else {
     GPR_ASSERT(a.clock_type == b.clock_type);
     diff.clock_type = GPR_TIMESPAN;
@@ -246,6 +254,10 @@ gpr_timespec gpr_convert_clock_type(gpr_timespec t, gpr_clock_type clock_type) {
     return gpr_time_add(gpr_now(clock_type), t);
   }
 
+  // If the given input hits this code, the same result is not guaranteed for
+  // the same input because it relies on `gpr_now` to calculate the difference
+  // between two different clocks. Please be careful when you want to use this
+  // function in unit tests. (e.g. https://github.com/grpc/grpc/pull/22655)
   return gpr_time_add(gpr_now(clock_type),
                       gpr_time_sub(t, gpr_now(t.clock_type)));
 }

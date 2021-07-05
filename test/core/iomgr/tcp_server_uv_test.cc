@@ -33,9 +33,9 @@
 #include <grpc/support/sync.h>
 #include <grpc/support/time.h>
 
+#include "src/core/lib/address_utils/sockaddr_utils.h"
 #include "src/core/lib/iomgr/iomgr.h"
 #include "src/core/lib/iomgr/resolve_address.h"
-#include "src/core/lib/iomgr/sockaddr_utils.h"
 #include "test/core/util/port.h"
 #include "test/core/util/test_config.h"
 
@@ -74,7 +74,7 @@ static void on_connect_result_set(on_connect_result* result,
   result->fd_index = acceptor->fd_index;
 }
 
-static void server_weak_ref_shutdown(void* arg, grpc_error* error) {
+static void server_weak_ref_shutdown(void* arg, grpc_error_handle error) {
   server_weak_ref* weak_ref = static_cast<server_weak_ref*>(arg);
   weak_ref->server = NULL;
 }
@@ -119,6 +119,7 @@ static void test_no_op(void) {
   grpc_tcp_server* s;
   GPR_ASSERT(GRPC_ERROR_NONE == grpc_tcp_server_create(NULL, NULL, &s));
   grpc_tcp_server_unref(s);
+  grpc_core::ExecCtx::Get()->Flush();
 }
 
 static void test_no_op_with_start(void) {
@@ -128,6 +129,7 @@ static void test_no_op_with_start(void) {
   LOG_TEST("test_no_op_with_start");
   grpc_tcp_server_start(s, NULL, 0, on_connect, NULL);
   grpc_tcp_server_unref(s);
+  grpc_core::ExecCtx::Get()->Flush();
 }
 
 static void test_no_op_with_port(void) {
@@ -147,6 +149,7 @@ static void test_no_op_with_port(void) {
              port > 0);
 
   grpc_tcp_server_unref(s);
+  grpc_core::ExecCtx::Get()->Flush();
 }
 
 static void test_no_op_with_port_and_start(void) {
@@ -168,6 +171,7 @@ static void test_no_op_with_port_and_start(void) {
   grpc_tcp_server_start(s, NULL, 0, on_connect, NULL);
 
   grpc_tcp_server_unref(s);
+  grpc_core::ExecCtx::Get()->Flush();
 }
 
 static void connect_cb(uv_connect_t* req, int status) {
@@ -273,41 +277,43 @@ static void test_connect(unsigned n) {
   GPR_ASSERT(weak_ref.server != NULL);
 
   grpc_tcp_server_unref(s);
-
+  grpc_core::ExecCtx::Get()->Flush();
   /* Weak ref lost. */
   GPR_ASSERT(weak_ref.server == NULL);
 }
 
-static void destroy_pollset(void* p, grpc_error* error) {
+static void destroy_pollset(void* p, grpc_error_handle error) {
   grpc_pollset_destroy(static_cast<grpc_pollset*>(p));
 }
 
 int main(int argc, char** argv) {
   grpc_closure destroyed;
-  grpc_core::ExecCtx exec_ctx;
-  grpc_test_init(argc, argv);
+  grpc::testing::TestEnvironment env(argc, argv);
   grpc_init();
-  g_pollset = static_cast<grpc_pollset*>(gpr_malloc(grpc_pollset_size()));
-  grpc_pollset_init(g_pollset, &g_mu);
+  {
+    grpc_core::ExecCtx exec_ctx;
+    g_pollset = static_cast<grpc_pollset*>(gpr_malloc(grpc_pollset_size()));
+    grpc_pollset_init(g_pollset, &g_mu);
 
-  test_no_op();
-  test_no_op_with_start();
-  test_no_op_with_port();
-  test_no_op_with_port_and_start();
-  test_connect(1);
-  test_connect(10);
+    test_no_op();
+    test_no_op_with_start();
+    test_no_op_with_port();
+    test_no_op_with_port_and_start();
+    test_connect(1);
+    test_connect(10);
 
-  GRPC_CLOSURE_INIT(&destroyed, destroy_pollset, g_pollset,
-                    grpc_schedule_on_exec_ctx);
-  grpc_pollset_shutdown(g_pollset, &destroyed);
+    GRPC_CLOSURE_INIT(&destroyed, destroy_pollset, g_pollset,
+                      grpc_schedule_on_exec_ctx);
+    grpc_pollset_shutdown(g_pollset, &destroyed);
 
+    gpr_free(g_pollset);
+  }
   grpc_shutdown();
-  gpr_free(g_pollset);
   return 0;
 }
 
 #else /* GRPC_UV */
 
-int main(int argc, char** argv) { return 1; }
+int main(int /*argc*/, char** /*argv*/) { return 1; }
 
 #endif /* GRPC_UV */

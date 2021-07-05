@@ -22,6 +22,9 @@
 #include <grpc/support/port_platform.h>
 
 #include <grpc/grpc.h>
+#include <grpc/impl/codegen/grpc_types.h>
+
+#include <vector>
 
 #include "src/core/lib/iomgr/closure.h"
 #include "src/core/lib/iomgr/endpoint.h"
@@ -37,6 +40,10 @@ typedef struct grpc_tcp_server_acceptor {
   /* Indices that may be passed to grpc_tcp_server_port_fd(). */
   unsigned port_index;
   unsigned fd_index;
+  /* Data when the connection is passed to tcp_server from external. */
+  bool external_connection;
+  int listener_fd;
+  grpc_byte_buffer* pending_data;
 } grpc_tcp_server_acceptor;
 
 /* Called for newly connected TCP connections.
@@ -44,16 +51,28 @@ typedef struct grpc_tcp_server_acceptor {
 typedef void (*grpc_tcp_server_cb)(void* arg, grpc_endpoint* ep,
                                    grpc_pollset* accepting_pollset,
                                    grpc_tcp_server_acceptor* acceptor);
+namespace grpc_core {
+// An interface for a handler to take a externally connected fd as a internal
+// connection.
+class TcpServerFdHandler {
+ public:
+  virtual ~TcpServerFdHandler() = default;
+  virtual void Handle(int listener_fd, int fd,
+                      grpc_byte_buffer* pending_read) = 0;
+};
+}  // namespace grpc_core
 
 typedef struct grpc_tcp_server_vtable {
-  grpc_error* (*create)(grpc_closure* shutdown_complete,
-                        const grpc_channel_args* args,
-                        grpc_tcp_server** server);
-  void (*start)(grpc_tcp_server* server, grpc_pollset** pollsets,
-                size_t pollset_count, grpc_tcp_server_cb on_accept_cb,
-                void* cb_arg);
-  grpc_error* (*add_port)(grpc_tcp_server* s, const grpc_resolved_address* addr,
-                          int* out_port);
+  grpc_error_handle (*create)(grpc_closure* shutdown_complete,
+                              const grpc_channel_args* args,
+                              grpc_tcp_server** server);
+  void (*start)(grpc_tcp_server* server,
+                const std::vector<grpc_pollset*>* pollsets,
+                grpc_tcp_server_cb on_accept_cb, void* cb_arg);
+  grpc_error_handle (*add_port)(grpc_tcp_server* s,
+                                const grpc_resolved_address* addr,
+                                int* out_port);
+  grpc_core::TcpServerFdHandler* (*create_fd_handler)(grpc_tcp_server* s);
   unsigned (*port_fd_count)(grpc_tcp_server* s, unsigned port_index);
   int (*port_fd)(grpc_tcp_server* s, unsigned port_index, unsigned fd_index);
   grpc_tcp_server* (*ref)(grpc_tcp_server* s);
@@ -66,13 +85,13 @@ typedef struct grpc_tcp_server_vtable {
 /* Create a server, initially not bound to any ports. The caller owns one ref.
    If shutdown_complete is not NULL, it will be used by
    grpc_tcp_server_unref() when the ref count reaches zero. */
-grpc_error* grpc_tcp_server_create(grpc_closure* shutdown_complete,
-                                   const grpc_channel_args* args,
-                                   grpc_tcp_server** server);
+grpc_error_handle grpc_tcp_server_create(grpc_closure* shutdown_complete,
+                                         const grpc_channel_args* args,
+                                         grpc_tcp_server** server);
 
 /* Start listening to bound ports */
-void grpc_tcp_server_start(grpc_tcp_server* server, grpc_pollset** pollsets,
-                           size_t pollset_count,
+void grpc_tcp_server_start(grpc_tcp_server* server,
+                           const std::vector<grpc_pollset*>* pollsets,
                            grpc_tcp_server_cb on_accept_cb, void* cb_arg);
 
 /* Add a port to the server, returning the newly allocated port on success, or
@@ -84,9 +103,14 @@ void grpc_tcp_server_start(grpc_tcp_server* server, grpc_pollset** pollsets,
    but not dualstack sockets. */
 /* TODO(ctiller): deprecate this, and make grpc_tcp_server_add_ports to handle
                   all of the multiple socket port matching logic in one place */
-grpc_error* grpc_tcp_server_add_port(grpc_tcp_server* s,
-                                     const grpc_resolved_address* addr,
-                                     int* out_port);
+grpc_error_handle grpc_tcp_server_add_port(grpc_tcp_server* s,
+                                           const grpc_resolved_address* addr,
+                                           int* out_port);
+
+/* Create and return a TcpServerFdHandler so that it can be used by upper layer
+   to hand over an externally connected fd to the grpc server. */
+grpc_core::TcpServerFdHandler* grpc_tcp_server_create_fd_handler(
+    grpc_tcp_server* s);
 
 /* Number of fds at the given port_index, or 0 if port_index is out of
    bounds. */

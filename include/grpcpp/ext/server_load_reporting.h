@@ -34,7 +34,8 @@ namespace experimental {
 // enable the feature, please make sure the binary builds with the
 // grpcpp_server_load_reporting library and set this option in the
 // ServerBuilder.
-class LoadReportingServiceServerBuilderOption : public ServerBuilderOption {
+class LoadReportingServiceServerBuilderOption
+    : public grpc::ServerBuilderOption {
  public:
   void UpdateArguments(::grpc::ChannelArguments* args) override;
   void UpdatePlugins(std::vector<std::unique_ptr<::grpc::ServerBuilderPlugin>>*
@@ -44,7 +45,7 @@ class LoadReportingServiceServerBuilderOption : public ServerBuilderOption {
 // Adds the load reporting cost with \a cost_name and \a cost_value in the
 // trailing metadata of the server context.
 void AddLoadReportingCost(grpc::ServerContext* ctx,
-                          const grpc::string& cost_name, double cost_value);
+                          const std::string& cost_name, double cost_value);
 
 }  // namespace experimental
 }  // namespace load_reporter

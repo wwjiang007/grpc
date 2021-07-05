@@ -16,36 +16,30 @@
  *
  */
 
-#include <gflags/gflags.h>
-#include <iostream>
-#include <memory>
-#include <string>
-
 #include <grpc/support/log.h>
 #include <grpcpp/server.h>
 #include <grpcpp/server_builder.h>
 #include <grpcpp/server_context.h>
 
-#include "src/proto/grpc/testing/echo.grpc.pb.h"
+#include <iostream>
+#include <memory>
+#include <string>
 
-DEFINE_string(address, "", "Address to bind to");
+#include "absl/flags/flag.h"
+#include "src/proto/grpc/testing/echo.grpc.pb.h"
+#include "test/cpp/util/test_config.h"
+
+ABSL_FLAG(std::string, address, "", "Address to bind to");
 
 using grpc::testing::EchoRequest;
 using grpc::testing::EchoResponse;
-
-// In some distros, gflags is in the namespace google, and in some others,
-// in gflags. This hack is enabling us to find both.
-namespace google {}
-namespace gflags {}
-using namespace google;
-using namespace gflags;
 
 namespace grpc {
 namespace testing {
 
 class ServiceImpl final : public ::grpc::testing::EchoTestService::Service {
   Status BidiStream(
-      ServerContext* context,
+      ServerContext* /*context*/,
       ServerReaderWriter<EchoResponse, EchoRequest>* stream) override {
     EchoRequest request;
     EchoResponse response;
@@ -62,17 +56,19 @@ void RunServer() {
   ServiceImpl service;
 
   ServerBuilder builder;
-  builder.AddListeningPort(FLAGS_address, grpc::InsecureServerCredentials());
+  builder.AddListeningPort(absl::GetFlag(FLAGS_address),
+                           grpc::InsecureServerCredentials());
   builder.RegisterService(&service);
   std::unique_ptr<Server> server(builder.BuildAndStart());
-  std::cout << "Server listening on " << FLAGS_address << std::endl;
+  std::cout << "Server listening on " << absl::GetFlag(FLAGS_address)
+            << std::endl;
   server->Wait();
 }
 }  // namespace testing
 }  // namespace grpc
 
 int main(int argc, char** argv) {
-  ParseCommandLineFlags(&argc, &argv, true);
+  grpc::testing::InitTest(&argc, &argv, true);
   grpc::testing::RunServer();
 
   return 0;

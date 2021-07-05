@@ -25,15 +25,14 @@
 #include <grpcpp/server.h>
 
 namespace grpc {
-
 class Server;
 class Service;
 
 class ServerInitializer {
  public:
-  ServerInitializer(Server* server) : server_(server) {}
+  explicit ServerInitializer(grpc::Server* server) : server_(server) {}
 
-  bool RegisterService(std::shared_ptr<Service> service) {
+  bool RegisterService(std::shared_ptr<grpc::Service> service) {
     if (!server_->RegisterService(nullptr, service.get())) {
       return false;
     }
@@ -41,13 +40,13 @@ class ServerInitializer {
     return true;
   }
 
-  const std::vector<grpc::string>* GetServiceList() {
+  const std::vector<std::string>* GetServiceList() {
     return &server_->services_;
   }
 
  private:
-  Server* server_;
-  std::vector<std::shared_ptr<Service> > default_services_;
+  grpc::Server* server_;
+  std::vector<std::shared_ptr<grpc::Service> > default_services_;
 };
 
 }  // namespace grpc

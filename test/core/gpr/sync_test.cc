@@ -431,7 +431,7 @@ static void refinc(void* v /*=m*/) {
     }
   }
   if (gpr_unref(&m->thread_refcount)) {
-    gpr_event_set(&m->event, (void*)1);
+    gpr_event_set(&m->event, reinterpret_cast<void*>(1));
   }
   mark_thread_done(m);
 }
@@ -458,7 +458,7 @@ static void refcheck(void* v /*=m*/) {
 /* ------------------------------------------------- */
 
 int main(int argc, char* argv[]) {
-  grpc_test_init(argc, argv);
+  grpc::testing::TestEnvironment env(argc, argv);
   test("mutex", &inc, nullptr, 1, 1);
   test("mutex try", &inctry, nullptr, 1, 1);
   test("cv", &inc_by_turns, nullptr, 1, 1);

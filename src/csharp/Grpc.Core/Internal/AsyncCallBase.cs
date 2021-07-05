@@ -40,8 +40,8 @@ namespace Grpc.Core.Internal
         static readonly ILogger Logger = GrpcEnvironment.Logger.ForType<AsyncCallBase<TWrite, TRead>>();
         protected static readonly Status DeserializeResponseFailureStatus = new Status(StatusCode.Internal, "Failed to deserialize response message.");
 
-        readonly Func<TWrite, byte[]> serializer;
-        readonly Func<byte[], TRead> deserializer;
+        readonly Action<TWrite, SerializationContext> serializer;
+        readonly Func<DeserializationContext, TRead> deserializer;
 
         protected readonly object myLock = new object();
 
@@ -63,7 +63,7 @@ namespace Grpc.Core.Internal
         protected bool initialMetadataSent;
         protected long streamingWritesCounter;  // Number of streaming send operations started so far.
 
-        public AsyncCallBase(Func<TWrite, byte[]> serializer, Func<byte[], TRead> deserializer)
+        public AsyncCallBase(Action<TWrite, SerializationContext> serializer, Func<DeserializationContext, TRead> deserializer)
         {
             this.serializer = GrpcPreconditions.CheckNotNull(serializer);
             this.deserializer = GrpcPreconditions.CheckNotNull(deserializer);
@@ -115,23 +115,25 @@ namespace Grpc.Core.Internal
         /// </summary>
         protected Task SendMessageInternalAsync(TWrite msg, WriteFlags writeFlags)
         {
-            byte[] payload = UnsafeSerialize(msg);
-
-            lock (myLock)
+            using (var serializationScope = DefaultSerializationContext.GetInitializedThreadLocalScope())
             {
-                GrpcPreconditions.CheckState(started);
-                var earlyResult = CheckSendAllowedOrEarlyResult();
-                if (earlyResult != null)
+                var payload = UnsafeSerialize(msg, serializationScope.Context);
+                lock (myLock)
                 {
-                    return earlyResult;
+                    GrpcPreconditions.CheckState(started);
+                    var earlyResult = CheckSendAllowedOrEarlyResult();
+                    if (earlyResult != null)
+                    {
+                        return earlyResult;
+                    }
+
+                    call.StartSendMessage(SendCompletionCallback, payload, writeFlags, !initialMetadataSent);
+
+                    initialMetadataSent = true;
+                    streamingWritesCounter++;
+                    streamingWriteTcs = new TaskCompletionSource<object>();
+                    return streamingWriteTcs.Task;
                 }
-
-                call.StartSendMessage(SendCompletionCallback, payload, writeFlags, !initialMetadataSent);
-
-                initialMetadataSent = true;
-                streamingWritesCounter++;
-                streamingWriteTcs = new TaskCompletionSource<object>();
-                return streamingWriteTcs.Task;
             }
         }
 
@@ -213,22 +215,30 @@ namespace Grpc.Core.Internal
         /// </summary>
         protected abstract Task CheckSendAllowedOrEarlyResult();
 
-        protected byte[] UnsafeSerialize(TWrite msg)
+        // runs the serializer, propagating any exceptions being thrown without modifying them
+        protected SliceBufferSafeHandle UnsafeSerialize(TWrite msg, DefaultSerializationContext context)
         {
-            return serializer(msg);
+            serializer(msg, context);
+            return context.GetPayload();
         }
 
-        protected Exception TryDeserialize(byte[] payload, out TRead msg)
+        protected Exception TryDeserialize(IBufferReader reader, out TRead msg)
         {
+            DefaultDeserializationContext context = null;
             try
             {
-                msg = deserializer(payload);
+                context = DefaultDeserializationContext.GetInitializedThreadLocal(reader);
+                msg = deserializer(context);
                 return null;
             }
             catch (Exception e)
             {
                 msg = default(TRead);
                 return e;
+            }
+            finally
+            {
+                context?.Reset();
             }
         }
 
@@ -316,21 +326,21 @@ namespace Grpc.Core.Internal
         /// <summary>
         /// Handles streaming read completion.
         /// </summary>
-        protected void HandleReadFinished(bool success, byte[] receivedMessage)
+        protected void HandleReadFinished(bool success, IBufferReader receivedMessageReader)
         {
-            // if success == false, received message will be null. It that case we will
+            // if success == false, the message reader will report null payload. It that case we will
             // treat this completion as the last read an rely on C core to handle the failed
             // read (e.g. deliver approriate statusCode on the clientside).
 
             TRead msg = default(TRead);
-            var deserializeException = (success && receivedMessage != null) ? TryDeserialize(receivedMessage, out msg) : null;
+            var deserializeException = (success && receivedMessageReader.TotalLength.HasValue) ? TryDeserialize(receivedMessageReader, out msg) : null;
 
             TaskCompletionSource<TRead> origTcs = null;
             bool releasedResources;
             lock (myLock)
             {
                 origTcs = streamingReadTcs;
-                if (receivedMessage == null)
+                if (!receivedMessageReader.TotalLength.HasValue)
                 {
                     // This was the last read.
                     readingDone = true;
@@ -374,9 +384,17 @@ namespace Grpc.Core.Internal
 
         IReceivedMessageCallback ReceivedMessageCallback => this;
 
-        void IReceivedMessageCallback.OnReceivedMessage(bool success, byte[] receivedMessage)
+        void IReceivedMessageCallback.OnReceivedMessage(bool success, IBufferReader receivedMessageReader)
         {
-            HandleReadFinished(success, receivedMessage);
+            HandleReadFinished(success, receivedMessageReader);
         }
+
+        internal CancellationTokenRegistration RegisterCancellationCallbackForToken(CancellationToken cancellationToken)
+        {
+            if (cancellationToken.CanBeCanceled) return cancellationToken.Register(CancelCallFromToken, this);
+            return default(CancellationTokenRegistration);
+        }
+
+        private static readonly Action<object> CancelCallFromToken = state => ((AsyncCallBase<TWrite, TRead>)state).Cancel();
     }
 }

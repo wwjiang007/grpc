@@ -25,6 +25,7 @@
 #include <grpcpp/alarm.h>
 #include <grpcpp/grpcpp.h>
 
+#include "src/core/lib/gprpp/sync.h"
 #include "src/core/lib/gprpp/thd.h"
 #include "src/cpp/server/load_reporter/load_reporter.h"
 
@@ -40,7 +41,7 @@ class LoadReporterAsyncServiceImpl
  public:
   explicit LoadReporterAsyncServiceImpl(
       std::unique_ptr<ServerCompletionQueue> cq);
-  ~LoadReporterAsyncServiceImpl();
+  ~LoadReporterAsyncServiceImpl() override;
 
   // Starts the working thread.
   void StartThread();
@@ -134,9 +135,9 @@ class LoadReporterAsyncServiceImpl
     void Shutdown(std::shared_ptr<ReportLoadHandler> self, const char* reason);
 
     // The key fields of the stream.
-    grpc::string lb_id_;
-    grpc::string load_balanced_hostname_;
-    grpc::string load_key_;
+    std::string lb_id_;
+    std::string load_balanced_hostname_;
+    std::string load_key_;
     uint64_t load_report_interval_ms_;
 
     // The data for RPC communication with the load reportee.
@@ -181,7 +182,7 @@ class LoadReporterAsyncServiceImpl
   std::unique_ptr<ServerCompletionQueue> cq_;
   // To synchronize the operations related to shutdown state of cq_, so that we
   // don't enqueue new tags into cq_ after it is already shut down.
-  std::mutex cq_shutdown_mu_;
+  grpc_core::Mutex cq_shutdown_mu_;
   std::atomic_bool shutdown_{false};
   std::unique_ptr<::grpc_core::Thread> thread_;
   std::unique_ptr<LoadReporter> load_reporter_;

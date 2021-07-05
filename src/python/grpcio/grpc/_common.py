@@ -14,26 +14,25 @@
 """Shared implementation."""
 
 import logging
-
+import time
 import six
 
 import grpc
 from grpc._cython import cygrpc
 
-logging.basicConfig()
 _LOGGER = logging.getLogger(__name__)
 
 CYGRPC_CONNECTIVITY_STATE_TO_CHANNEL_CONNECTIVITY = {
     cygrpc.ConnectivityState.idle:
-    grpc.ChannelConnectivity.IDLE,
+        grpc.ChannelConnectivity.IDLE,
     cygrpc.ConnectivityState.connecting:
-    grpc.ChannelConnectivity.CONNECTING,
+        grpc.ChannelConnectivity.CONNECTING,
     cygrpc.ConnectivityState.ready:
-    grpc.ChannelConnectivity.READY,
+        grpc.ChannelConnectivity.READY,
     cygrpc.ConnectivityState.transient_failure:
-    grpc.ChannelConnectivity.TRANSIENT_FAILURE,
+        grpc.ChannelConnectivity.TRANSIENT_FAILURE,
     cygrpc.ConnectivityState.shutdown:
-    grpc.ChannelConnectivity.SHUTDOWN,
+        grpc.ChannelConnectivity.SHUTDOWN,
 }
 
 CYGRPC_STATUS_CODE_TO_STATUS_CODE = {
@@ -56,28 +55,27 @@ CYGRPC_STATUS_CODE_TO_STATUS_CODE = {
     cygrpc.StatusCode.data_loss: grpc.StatusCode.DATA_LOSS,
 }
 STATUS_CODE_TO_CYGRPC_STATUS_CODE = {
-    grpc_code: cygrpc_code
-    for cygrpc_code, grpc_code in six.iteritems(
+    grpc_code: cygrpc_code for cygrpc_code, grpc_code in six.iteritems(
         CYGRPC_STATUS_CODE_TO_STATUS_CODE)
 }
+
+MAXIMUM_WAIT_TIMEOUT = 0.1
+
+_ERROR_MESSAGE_PORT_BINDING_FAILED = 'Failed to bind to address %s; set ' \
+    'GRPC_VERBOSITY=debug environment variable to see detailed error message.'
 
 
 def encode(s):
     if isinstance(s, bytes):
         return s
     else:
-        return s.encode('ascii')
+        return s.encode('utf8')
 
 
 def decode(b):
-    if isinstance(b, str):
-        return b
-    else:
-        try:
-            return b.decode('utf8')
-        except UnicodeDecodeError:
-            _LOGGER.exception('Invalid encoding on %s', b)
-            return b.decode('latin1')
+    if isinstance(b, bytes):
+        return b.decode('utf-8', 'replace')
+    return b
 
 
 def _transform(message, transformer, exception_message):
@@ -102,3 +100,69 @@ def deserialize(serialized_message, deserializer):
 
 def fully_qualified_method(group, method):
     return '/{}/{}'.format(group, method)
+
+
+def _wait_once(wait_fn, timeout, spin_cb):
+    wait_fn(timeout=timeout)
+    if spin_cb is not None:
+        spin_cb()
+
+
+def wait(wait_fn, wait_complete_fn, timeout=None, spin_cb=None):
+    """Blocks waiting for an event without blocking the thread indefinitely.
+
+    See https://github.com/grpc/grpc/issues/19464 for full context. CPython's
+    `threading.Event.wait` and `threading.Condition.wait` methods, if invoked
+    without a timeout kwarg, may block the calling thread indefinitely. If the
+    call is made from the main thread, this means that signal handlers may not
+    run for an arbitrarily long period of time.
+
+    This wrapper calls the supplied wait function with an arbitrary short
+    timeout to ensure that no signal handler has to wait longer than
+    MAXIMUM_WAIT_TIMEOUT before executing.
+
+    Args:
+      wait_fn: A callable acceptable a single float-valued kwarg named
+        `timeout`. This function is expected to be one of `threading.Event.wait`
+        or `threading.Condition.wait`.
+      wait_complete_fn: A callable taking no arguments and returning a bool.
+        When this function returns true, it indicates that waiting should cease.
+      timeout: An optional float-valued number of seconds after which the wait
+        should cease.
+      spin_cb: An optional Callable taking no arguments and returning nothing.
+        This callback will be called on each iteration of the spin. This may be
+        used for, e.g. work related to forking.
+
+    Returns:
+      True if a timeout was supplied and it was reached. False otherwise.
+    """
+    if timeout is None:
+        while not wait_complete_fn():
+            _wait_once(wait_fn, MAXIMUM_WAIT_TIMEOUT, spin_cb)
+    else:
+        end = time.time() + timeout
+        while not wait_complete_fn():
+            remaining = min(end - time.time(), MAXIMUM_WAIT_TIMEOUT)
+            if remaining < 0:
+                return True
+            _wait_once(wait_fn, remaining, spin_cb)
+    return False
+
+
+def validate_port_binding_result(address, port):
+    """Validates if the port binding succeed.
+
+    If the port returned by Core is 0, the binding is failed. However, in that
+    case, the Core API doesn't return a detailed failing reason. The best we
+    can do is raising an exception to prevent further confusion.
+
+    Args:
+        address: The address string to be bound.
+        port: An int returned by core
+    """
+    if port == 0:
+        # The Core API doesn't return a failure message. The best we can do
+        # is raising an exception to prevent further confusion.
+        raise RuntimeError(_ERROR_MESSAGE_PORT_BINDING_FAILED % address)
+    else:
+        return port

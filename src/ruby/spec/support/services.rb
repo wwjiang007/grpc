@@ -17,12 +17,18 @@ require 'spec_helper'
 
 # A test message
 class EchoMsg
-  def self.marshal(_o)
-    ''
+  attr_reader :msg
+
+  def initialize(msg: '')
+    @msg = msg
   end
 
-  def self.unmarshal(_o)
-    EchoMsg.new
+  def self.marshal(o)
+    o.msg
+  end
+
+  def self.unmarshal(msg)
+    EchoMsg.new(msg: msg)
   end
 end
 
@@ -33,6 +39,7 @@ class EchoService
   rpc :a_client_streaming_rpc, stream(EchoMsg), EchoMsg
   rpc :a_server_streaming_rpc, EchoMsg, stream(EchoMsg)
   rpc :a_bidi_rpc, stream(EchoMsg), stream(EchoMsg)
+  rpc :a_client_streaming_rpc_unimplemented, stream(EchoMsg), EchoMsg
   attr_reader :received_md
 
   def initialize(**kw)

@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Helper script to crosscompile grpc_csharp_ext native extension for Android.
+# Helper script to crosscompile grpc_csharp_ext native extension for iOS.
 
 set -ex
 
@@ -28,10 +28,14 @@ function build {
     PATH_CC="$(xcrun --sdk $SDK --find clang)"
     PATH_CXX="$(xcrun --sdk $SDK --find clang++)"
 
-    # TODO(jtattermusch): add  -mios-version-min=6.0 and -Wl,ios_version_min=6.0
-    CPPFLAGS="-O2 -Wframe-larger-than=16384 -arch $ARCH -isysroot $(xcrun --sdk $SDK --show-sdk-path) -DPB_NO_PACKED_STRUCTS=1"
-    LDFLAGS="-arch $ARCH -isysroot $(xcrun --sdk $SDK --show-sdk-path)"
+    CPPFLAGS="-O2 -Wframe-larger-than=16384 -arch $ARCH -isysroot $(xcrun --sdk $SDK --show-sdk-path) -mios-version-min=9.0 -DPB_NO_PACKED_STRUCTS=1"
+    LDFLAGS="-arch $ARCH -isysroot $(xcrun --sdk $SDK --show-sdk-path) -Wl,ios_version_min=9.0"
 
+    # TODO(jtattermusch): Ideally we'd be setting build defines that correspond to using cmake's
+    # gRPC_XDS_USER_AGENT_IS_CSHARP option here, but since using XDS with C# on iOS is unlikely
+    # and gRPC C#'s support of iOS is only experimental, it's fair to skip that for now
+    # (which will result in XDS user agent language being "not specified" and that's ok
+    # since there are other circumstances in which it isn't set).
     # TODO(jtattermusch): revisit the build arguments
     make -j4 static_csharp \
         VALID_CONFIG_ios_$ARCH="1" \
@@ -51,10 +55,12 @@ function fatten {
 
     mkdir -p libs/ios
     lipo -create -output libs/ios/lib$LIB_NAME.a \
+        libs/ios_armv7/lib$LIB_NAME.a \
         libs/ios_arm64/lib$LIB_NAME.a \
         libs/ios_x86_64/lib$LIB_NAME.a
 }
 
+build iphoneos armv7
 build iphoneos arm64
 build iphonesimulator x86_64
 

@@ -21,21 +21,25 @@
 #include <stdio.h>
 #include <string.h>
 
+#include <string>
+
+#include "absl/strings/str_cat.h"
+
 #include <grpc/byte_buffer.h>
 #include <grpc/byte_buffer_reader.h>
 #include <grpc/compression.h>
 #include <grpc/support/alloc.h>
 #include <grpc/support/log.h>
-#include <grpc/support/string_util.h>
 #include <grpc/support/time.h>
 
 #include "src/core/lib/channel/channel_args.h"
+#include "src/core/lib/compression/compression_args.h"
 #include "src/core/lib/surface/call.h"
 #include "src/core/lib/surface/call_test_only.h"
 #include "src/core/lib/transport/static_metadata.h"
 #include "test/core/end2end/cq_verifier.h"
 
-static void* tag(intptr_t t) { return (void*)t; }
+static void* tag(intptr_t t) { return reinterpret_cast<void*>(t); }
 
 static grpc_end2end_test_fixture begin_test(grpc_end2end_test_config config,
                                             const char* test_name,
@@ -123,10 +127,10 @@ static void request_for_disabled_algorithm(
   request_payload_slice = grpc_slice_from_copied_string(str);
   request_payload = grpc_raw_byte_buffer_create(&request_payload_slice, 1);
 
-  client_args = grpc_channel_args_set_compression_algorithm(
+  client_args = grpc_channel_args_set_channel_default_compression_algorithm(
       nullptr, requested_client_compression_algorithm);
-  server_args =
-      grpc_channel_args_set_compression_algorithm(nullptr, GRPC_COMPRESS_NONE);
+  server_args = grpc_channel_args_set_channel_default_compression_algorithm(
+      nullptr, GRPC_COMPRESS_NONE);
   {
     grpc_core::ExecCtx exec_ctx;
     server_args = grpc_channel_args_compression_algorithm_set_state(
@@ -230,12 +234,10 @@ static void request_for_disabled_algorithm(
 
   const char* algo_name = nullptr;
   GPR_ASSERT(grpc_compression_algorithm_name(algorithm_to_disable, &algo_name));
-  char* expected_details = nullptr;
-  gpr_asprintf(&expected_details, "Compression algorithm '%s' is disabled.",
-               algo_name);
+  std::string expected_details =
+      absl::StrCat("Compression algorithm '", algo_name, "' is disabled.");
   /* and we expect a specific reason for it */
-  GPR_ASSERT(0 == grpc_slice_str_cmp(details, expected_details));
-  gpr_free(expected_details);
+  GPR_ASSERT(0 == grpc_slice_str_cmp(details, expected_details.c_str()));
   GPR_ASSERT(0 == grpc_slice_str_cmp(call_details.method, "/foo"));
 
   grpc_slice_unref(details);
@@ -268,8 +270,8 @@ static void request_with_payload_template(
     uint32_t client_send_flags_bitmask,
     grpc_compression_algorithm default_client_channel_compression_algorithm,
     grpc_compression_algorithm default_server_channel_compression_algorithm,
-    grpc_compression_algorithm expected_client_compression_algorithm,
-    grpc_compression_algorithm expected_server_compression_algorithm,
+    grpc_compression_algorithm /*expected_client_compression_algorithm*/,
+    grpc_compression_algorithm /*expected_server_compression_algorithm*/,
     grpc_metadata* client_init_metadata, bool set_server_level,
     grpc_compression_level server_compression_level,
     bool send_message_before_initial_metadata,
@@ -309,13 +311,13 @@ static void request_with_payload_template(
   grpc_slice response_payload_slice =
       grpc_slice_from_copied_string(response_str);
 
-  client_args = grpc_channel_args_set_compression_algorithm(
+  client_args = grpc_channel_args_set_channel_default_compression_algorithm(
       nullptr, default_client_channel_compression_algorithm);
   if (set_default_server_message_compression_algorithm) {
-    server_args = grpc_channel_args_set_compression_algorithm(
+    server_args = grpc_channel_args_set_channel_default_compression_algorithm(
         nullptr, default_server_message_compression_algorithm);
   } else {
-    server_args = grpc_channel_args_set_compression_algorithm(
+    server_args = grpc_channel_args_set_channel_default_compression_algorithm(
         nullptr, default_server_channel_compression_algorithm);
   }
 

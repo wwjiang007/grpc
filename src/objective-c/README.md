@@ -1,7 +1,7 @@
 [![Cocoapods](https://img.shields.io/cocoapods/v/gRPC.svg)](https://cocoapods.org/pods/gRPC)
 # gRPC for Objective-C
 gRPC Objective C library provides Objective C API for users to make gRPC calls on iOS or OS X
-platforms. Currently, the minimum supported iOS version is 7.0 and OS X version is 10.9 (Mavericks).
+platforms. Currently, the minimum supported iOS version is 9.0 and OS X version is 10.10 (Yosemite).
 
 While gRPC doesn't require the use of an IDL to describe the API of services, using one simplifies
 usage and adds some interoperability guarantees. Here we use [Protocol Buffers][], and provide a
@@ -43,8 +43,8 @@ Pod::Spec.new do |s|
   s.summary = '...'
   s.source = { :git => 'https://github.com/...' }
 
-  s.ios.deployment_target = '7.1'
-  s.osx.deployment_target = '10.9'
+  s.ios.deployment_target = '9.0'
+  s.osx.deployment_target = '10.10'
 
   # Base directory where the .proto files are.
   src = '.'
@@ -242,3 +242,12 @@ pod `gRPC-Core`, :podspec => "." # assuming gRPC-Core.podspec is in the same dir
 
 These steps should allow gRPC to use OpenSSL and drop BoringSSL dependency. If you see any issue,
 file an issue to us.
+
+## Upgrade issue with BoringSSL
+If you were using an old version of gRPC (<= v1.14) which depended on pod `BoringSSL` rather than
+`BoringSSL-GRPC` and meet issue with the library like:
+```
+ld: framework not found openssl
+```
+updating `-framework openssl` in Other Linker Flags to `-framework openssl_grpc` in your project
+may resolve this issue (see [#16821](https://github.com/grpc/grpc/issues/16821)).

@@ -33,8 +33,8 @@ namespace grpc {
 ///
 /// \param target The name of the target.
 /// \param fd The file descriptor representing a socket.
-std::shared_ptr<Channel> CreateInsecureChannelFromFd(const grpc::string& target,
-                                                     int fd);
+std::shared_ptr<grpc::Channel> CreateInsecureChannelFromFd(
+    const std::string& target, int fd);
 
 /// Create a new \a Channel communicating over given file descriptor with custom
 /// channel arguments.
@@ -42,8 +42,26 @@ std::shared_ptr<Channel> CreateInsecureChannelFromFd(const grpc::string& target,
 /// \param target The name of the target.
 /// \param fd The file descriptor representing a socket.
 /// \param args Options for channel creation.
-std::shared_ptr<Channel> CreateCustomInsecureChannelFromFd(
-    const grpc::string& target, int fd, const ChannelArguments& args);
+std::shared_ptr<grpc::Channel> CreateCustomInsecureChannelFromFd(
+    const std::string& target, int fd, const grpc::ChannelArguments& args);
+
+namespace experimental {
+
+/// Create a new \a Channel communicating over given file descriptor with custom
+/// channel arguments.
+///
+/// \param target The name of the target.
+/// \param fd The file descriptor representing a socket.
+/// \param args Options for channel creation.
+/// \param interceptor_creators Vector of interceptor factory objects.
+std::shared_ptr<grpc::Channel>
+CreateCustomInsecureChannelWithInterceptorsFromFd(
+    const std::string& target, int fd, const grpc::ChannelArguments& args,
+    std::vector<
+        std::unique_ptr<grpc::experimental::ClientInterceptorFactoryInterface>>
+        interceptor_creators);
+
+}  // namespace experimental
 
 #endif  // GPR_SUPPORT_CHANNELS_FROM_FD
 

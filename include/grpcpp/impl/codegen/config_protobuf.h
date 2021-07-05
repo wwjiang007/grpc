@@ -21,18 +21,15 @@
 
 #define GRPC_OPEN_SOURCE_PROTO
 
-#ifndef GRPC_CUSTOM_PROTOBUF_INT64
-#include <google/protobuf/stubs/common.h>
-#define GRPC_CUSTOM_PROTOBUF_INT64 ::google::protobuf::int64
-#endif
-
 #ifndef GRPC_CUSTOM_MESSAGE
 #ifdef GRPC_USE_PROTO_LITE
 #include <google/protobuf/message_lite.h>
 #define GRPC_CUSTOM_MESSAGE ::google::protobuf::MessageLite
+#define GRPC_CUSTOM_MESSAGELITE ::google::protobuf::MessageLite
 #else
 #include <google/protobuf/message.h>
 #define GRPC_CUSTOM_MESSAGE ::google::protobuf::Message
+#define GRPC_CUSTOM_MESSAGELITE ::google::protobuf::MessageLite
 #endif
 #endif
 
@@ -66,11 +63,18 @@
 #define GRPC_CUSTOM_CODEDINPUTSTREAM ::google::protobuf::io::CodedInputStream
 #endif
 
+#ifndef GRPC_CUSTOM_JSONUTIL
+#include <google/protobuf/util/json_util.h>
+#include <google/protobuf/util/type_resolver_util.h>
+#define GRPC_CUSTOM_JSONUTIL ::google::protobuf::util
+#define GRPC_CUSTOM_UTIL_STATUS ::google::protobuf::util::Status
+#endif
+
 namespace grpc {
 namespace protobuf {
 
 typedef GRPC_CUSTOM_MESSAGE Message;
-typedef GRPC_CUSTOM_PROTOBUF_INT64 int64;
+typedef GRPC_CUSTOM_MESSAGELITE MessageLite;
 
 typedef GRPC_CUSTOM_DESCRIPTOR Descriptor;
 typedef GRPC_CUSTOM_DESCRIPTORPOOL DescriptorPool;
@@ -82,6 +86,13 @@ typedef GRPC_CUSTOM_METHODDESCRIPTOR MethodDescriptor;
 typedef GRPC_CUSTOM_SERVICEDESCRIPTOR ServiceDescriptor;
 typedef GRPC_CUSTOM_SIMPLEDESCRIPTORDATABASE SimpleDescriptorDatabase;
 typedef GRPC_CUSTOM_SOURCELOCATION SourceLocation;
+
+namespace util {
+typedef GRPC_CUSTOM_UTIL_STATUS Status;
+}  // namespace util
+
+// NOLINTNEXTLINE(misc-unused-alias-decls)
+namespace json = GRPC_CUSTOM_JSONUTIL;
 
 namespace io {
 typedef GRPC_CUSTOM_ZEROCOPYOUTPUTSTREAM ZeroCopyOutputStream;

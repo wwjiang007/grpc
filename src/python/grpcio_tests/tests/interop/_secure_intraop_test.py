@@ -19,7 +19,7 @@ import grpc
 from src.proto.grpc.testing import test_pb2_grpc
 
 from tests.interop import _intraop_test_case
-from tests.interop import methods
+from tests.interop import service
 from tests.interop import resources
 from tests.unit import test_common
 
@@ -30,7 +30,7 @@ class SecureIntraopTest(_intraop_test_case.IntraopTestCase, unittest.TestCase):
 
     def setUp(self):
         self.server = test_common.test_server()
-        test_pb2_grpc.add_TestServiceServicer_to_server(methods.TestService(),
+        test_pb2_grpc.add_TestServiceServicer_to_server(service.TestService(),
                                                         self.server)
         port = self.server.add_secure_port(
             '[::]:0',
@@ -38,12 +38,13 @@ class SecureIntraopTest(_intraop_test_case.IntraopTestCase, unittest.TestCase):
                                           resources.certificate_chain())]))
         self.server.start()
         self.stub = test_pb2_grpc.TestServiceStub(
-            grpc.secure_channel('localhost:{}'.format(port),
-                                grpc.ssl_channel_credentials(
-                                    resources.test_root_certificates()), ((
-                                        'grpc.ssl_target_name_override',
-                                        _SERVER_HOST_OVERRIDE,
-                                    ),)))
+            grpc.secure_channel(
+                'localhost:{}'.format(port),
+                grpc.ssl_channel_credentials(
+                    resources.test_root_certificates()), ((
+                        'grpc.ssl_target_name_override',
+                        _SERVER_HOST_OVERRIDE,
+                    ),)))
 
     def tearDown(self):
         self.server.stop(None)

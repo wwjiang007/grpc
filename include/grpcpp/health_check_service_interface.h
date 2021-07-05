@@ -33,10 +33,14 @@ class HealthCheckServiceInterface {
   virtual ~HealthCheckServiceInterface() {}
 
   /// Set or change the serving status of the given \a service_name.
-  virtual void SetServingStatus(const grpc::string& service_name,
+  virtual void SetServingStatus(const std::string& service_name,
                                 bool serving) = 0;
   /// Apply to all registered service names.
   virtual void SetServingStatus(bool serving) = 0;
+
+  /// Set all registered service names to not serving and prevent future
+  /// state changes.
+  virtual void Shutdown() {}
 };
 
 /// Enable/disable the default health checking service. This applies to all C++

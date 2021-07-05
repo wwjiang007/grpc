@@ -24,6 +24,7 @@
 
 #include <grpc/support/alloc.h>
 #include <grpc/support/log.h>
+#include <grpc/support/string_util.h>
 
 #include "src/core/lib/channel/channel_trace.h"
 #include "src/core/lib/channel/channelz.h"
@@ -33,7 +34,6 @@
 #include "src/core/lib/iomgr/exec_ctx.h"
 #include "src/core/lib/json/json.h"
 #include "src/core/lib/surface/channel.h"
-
 #include "test/core/util/test_config.h"
 
 #include <stdlib.h>
@@ -43,56 +43,102 @@ namespace grpc_core {
 namespace channelz {
 namespace testing {
 
-TEST(ChannelzRegistryTest, UuidStartsAboveZeroTest) {
-  BaseNode* channelz_channel = nullptr;
-  intptr_t uuid = ChannelzRegistry::Register(channelz_channel);
+class ChannelzRegistryTest : public ::testing::Test {
+ protected:
+  // ensure we always have a fresh registry for tests.
+  void SetUp() override { ChannelzRegistry::Init(); }
+
+  void TearDown() override { ChannelzRegistry::Shutdown(); }
+};
+
+static RefCountedPtr<BaseNode> CreateTestNode() {
+  return MakeRefCounted<ListenSocketNode>("test", "test");
+}
+
+TEST_F(ChannelzRegistryTest, UuidStartsAboveZeroTest) {
+  RefCountedPtr<BaseNode> channelz_channel = CreateTestNode();
+  intptr_t uuid = channelz_channel->uuid();
   EXPECT_GT(uuid, 0) << "First uuid chose must be greater than zero. Zero if "
                         "reserved according to "
                         "https://github.com/grpc/proposal/blob/master/"
                         "A14-channelz.md";
-  ChannelzRegistry::Unregister(uuid);
 }
 
-TEST(ChannelzRegistryTest, UuidsAreIncreasing) {
-  BaseNode* channelz_channel = nullptr;
-  std::vector<intptr_t> uuids;
-  uuids.reserve(10);
+TEST_F(ChannelzRegistryTest, UuidsAreIncreasing) {
+  std::vector<RefCountedPtr<BaseNode>> channelz_channels;
+  channelz_channels.reserve(10);
   for (int i = 0; i < 10; ++i) {
-    // reregister the same object. It's ok since we are just testing uuids
-    uuids.push_back(ChannelzRegistry::Register(channelz_channel));
+    channelz_channels.push_back(CreateTestNode());
   }
-  for (size_t i = 1; i < uuids.size(); ++i) {
-    EXPECT_LT(uuids[i - 1], uuids[i]) << "Uuids must always be increasing";
+  for (size_t i = 1; i < channelz_channels.size(); ++i) {
+    EXPECT_LT(channelz_channels[i - 1]->uuid(), channelz_channels[i]->uuid())
+        << "Uuids must always be increasing";
   }
 }
 
-TEST(ChannelzRegistryTest, RegisterGetTest) {
-  // we hackily jam an intptr_t into this pointer to check for equality later
-  BaseNode* channelz_channel = (BaseNode*)42;
-  intptr_t uuid = ChannelzRegistry::Register(channelz_channel);
-  BaseNode* retrieved = ChannelzRegistry::Get(uuid);
+TEST_F(ChannelzRegistryTest, RegisterGetTest) {
+  RefCountedPtr<BaseNode> channelz_channel = CreateTestNode();
+  RefCountedPtr<BaseNode> retrieved =
+      ChannelzRegistry::Get(channelz_channel->uuid());
   EXPECT_EQ(channelz_channel, retrieved);
 }
 
-TEST(ChannelzRegistryTest, RegisterManyItems) {
-  // we hackily jam an intptr_t into this pointer to check for equality later
-  BaseNode* channelz_channel = (BaseNode*)42;
+TEST_F(ChannelzRegistryTest, RegisterManyItems) {
+  std::vector<RefCountedPtr<BaseNode>> channelz_channels;
   for (int i = 0; i < 100; i++) {
-    intptr_t uuid = ChannelzRegistry::Register(channelz_channel);
-    BaseNode* retrieved = ChannelzRegistry::Get(uuid);
-    EXPECT_EQ(channelz_channel, retrieved);
+    channelz_channels.push_back(CreateTestNode());
+    RefCountedPtr<BaseNode> retrieved =
+        ChannelzRegistry::Get(channelz_channels[i]->uuid());
+    EXPECT_EQ(channelz_channels[i], retrieved);
   }
 }
 
-TEST(ChannelzRegistryTest, NullIfNotPresentTest) {
-  // we hackily jam an intptr_t into this pointer to check for equality later
-  BaseNode* channelz_channel = (BaseNode*)42;
-  intptr_t uuid = ChannelzRegistry::Register(channelz_channel);
+TEST_F(ChannelzRegistryTest, NullIfNotPresentTest) {
+  RefCountedPtr<BaseNode> channelz_channel = CreateTestNode();
   // try to pull out a uuid that does not exist.
-  BaseNode* nonexistant = ChannelzRegistry::Get(uuid + 1);
+  RefCountedPtr<BaseNode> nonexistant =
+      ChannelzRegistry::Get(channelz_channel->uuid() + 1);
   EXPECT_EQ(nonexistant, nullptr);
-  BaseNode* retrieved = ChannelzRegistry::Get(uuid);
+  RefCountedPtr<BaseNode> retrieved =
+      ChannelzRegistry::Get(channelz_channel->uuid());
   EXPECT_EQ(channelz_channel, retrieved);
+}
+
+TEST_F(ChannelzRegistryTest, TestUnregistration) {
+  const int kLoopIterations = 100;
+  // These channels will stay in the registry for the duration of the test.
+  std::vector<RefCountedPtr<BaseNode>> even_channels;
+  even_channels.reserve(kLoopIterations);
+  std::vector<intptr_t> odd_uuids;
+  odd_uuids.reserve(kLoopIterations);
+  {
+    // These channels will unregister themselves at the end of this block.
+    std::vector<RefCountedPtr<BaseNode>> odd_channels;
+    odd_channels.reserve(kLoopIterations);
+    for (int i = 0; i < kLoopIterations; i++) {
+      even_channels.push_back(CreateTestNode());
+      odd_channels.push_back(CreateTestNode());
+      odd_uuids.push_back(odd_channels[i]->uuid());
+    }
+  }
+  // Check that the even channels are present and the odd channels are not.
+  for (int i = 0; i < kLoopIterations; i++) {
+    RefCountedPtr<BaseNode> retrieved =
+        ChannelzRegistry::Get(even_channels[i]->uuid());
+    EXPECT_EQ(even_channels[i], retrieved);
+    retrieved = ChannelzRegistry::Get(odd_uuids[i]);
+    EXPECT_EQ(retrieved, nullptr);
+  }
+  // Add more channels and verify that they get added correctly, to make
+  // sure that the unregistration didn't leave the registry in a weird state.
+  std::vector<RefCountedPtr<BaseNode>> more_channels;
+  more_channels.reserve(kLoopIterations);
+  for (int i = 0; i < kLoopIterations; i++) {
+    more_channels.push_back(CreateTestNode());
+    RefCountedPtr<BaseNode> retrieved =
+        ChannelzRegistry::Get(more_channels[i]->uuid());
+    EXPECT_EQ(more_channels[i], retrieved);
+  }
 }
 
 }  // namespace testing
@@ -100,10 +146,8 @@ TEST(ChannelzRegistryTest, NullIfNotPresentTest) {
 }  // namespace grpc_core
 
 int main(int argc, char** argv) {
-  grpc_test_init(argc, argv);
-  grpc_init();
+  grpc::testing::TestEnvironment env(argc, argv);
   ::testing::InitGoogleTest(&argc, argv);
   int ret = RUN_ALL_TESTS();
-  grpc_shutdown();
   return ret;
 }

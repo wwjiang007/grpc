@@ -66,7 +66,7 @@ static const char prefix[] =
     "\x01\x00\x00\x27\x10"
     "";
 
-static void* tag(intptr_t t) { return (void*)t; }
+static void* tag(intptr_t t) { return reinterpret_cast<void*>(t); }
 
 static void verifier(grpc_server* server, grpc_completion_queue* cq,
                      void* registered_method) {
@@ -109,7 +109,7 @@ static void addbuf(const void* data, size_t len) {
 
 int main(int argc, char** argv) {
   int i;
-  grpc_test_init(argc, argv);
+  grpc::testing::TestEnvironment env(argc, argv);
   grpc_init();
 
 #define NUM_FRAMES 10

@@ -20,6 +20,7 @@
 
 #include <grpc/support/log.h>
 
+#include "test/core/util/test_config.h"
 #include "test/cpp/qps/benchmark_config.h"
 #include "test/cpp/qps/driver.h"
 #include "test/cpp/qps/report.h"
@@ -48,7 +49,7 @@ static void RunSynchronousUnaryPingPong() {
 
   const auto result =
       RunScenario(client_config, 1, server_config, 1, WARMUP, BENCHMARK, -2, "",
-                  kInsecureCredentialsType, true, 0);
+                  kInsecureCredentialsType, {}, true, 0);
 
   GetReporter()->ReportQPS(*result);
   GetReporter()->ReportLatency(*result);
@@ -58,6 +59,7 @@ static void RunSynchronousUnaryPingPong() {
 }  // namespace grpc
 
 int main(int argc, char** argv) {
+  grpc::testing::TestEnvironment env(argc, argv);
   grpc::testing::InitTest(&argc, &argv, true);
 
   grpc::testing::RunSynchronousUnaryPingPong();

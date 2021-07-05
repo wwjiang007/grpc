@@ -98,7 +98,7 @@ TEST(ServerRetryThrottleData, Replacement) {
 
 TEST(ServerRetryThrottleMap, Replacement) {
   ServerRetryThrottleMap::Init();
-  const char kServerName[] = "server_name";
+  const std::string kServerName = "server_name";
   // Create old throttle data.
   // Max token count is 4, so threshold for retrying is 2.
   // Token count starts at 4.
@@ -136,7 +136,7 @@ TEST(ServerRetryThrottleMap, Replacement) {
 }  // namespace grpc_core
 
 int main(int argc, char** argv) {
-  grpc_test_init(argc, argv);
+  grpc::testing::TestEnvironment env(argc, argv);
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }

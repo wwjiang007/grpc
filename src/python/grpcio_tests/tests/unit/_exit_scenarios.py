@@ -16,6 +16,7 @@
 import argparse
 import threading
 import time
+import logging
 
 import grpc
 
@@ -86,7 +87,7 @@ def hang_stream_stream(request_iterator, servicer_context):
 
 def hang_partial_stream_stream(request_iterator, servicer_context):
     for _ in range(test_constants.STREAM_LENGTH // 2):
-        yield next(request_iterator)
+        yield next(request_iterator)  #pylint: disable=stop-iteration-return
     time.sleep(WAIT_TIME)
 
 
@@ -161,10 +162,12 @@ def infinite_request_iterator():
 
 
 if __name__ == '__main__':
+    logging.basicConfig()
     parser = argparse.ArgumentParser()
     parser.add_argument('scenario', type=str)
-    parser.add_argument(
-        '--wait_for_interrupt', dest='wait_for_interrupt', action='store_true')
+    parser.add_argument('--wait_for_interrupt',
+                        dest='wait_for_interrupt',
+                        action='store_true')
     args = parser.parse_args()
 
     if args.scenario == UNSTARTED_SERVER:

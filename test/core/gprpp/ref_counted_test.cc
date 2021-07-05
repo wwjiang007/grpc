@@ -18,6 +18,9 @@
 
 #include "src/core/lib/gprpp/ref_counted.h"
 
+#include <set>
+
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include "src/core/lib/gprpp/memory.h"
@@ -29,34 +32,147 @@ namespace {
 
 class Foo : public RefCounted<Foo> {
  public:
-  Foo() {}
+  Foo() {
+    static_assert(std::has_virtual_destructor<Foo>::value,
+                  "PolymorphicRefCount doesn't have a virtual dtor");
+  }
 };
 
 TEST(RefCounted, Basic) {
-  Foo* foo = New<Foo>();
+  Foo* foo = new Foo();
   foo->Unref();
 }
 
 TEST(RefCounted, ExtraRef) {
-  Foo* foo = New<Foo>();
+  Foo* foo = new Foo();
   RefCountedPtr<Foo> foop = foo->Ref();
   foop.release();
   foo->Unref();
   foo->Unref();
 }
 
-// Note: We use DebugOnlyTraceFlag instead of TraceFlag to ensure that
-// things build properly in both debug and non-debug cases.
-DebugOnlyTraceFlag foo_tracer(true, "foo");
-
-class FooWithTracing : public RefCountedWithTracing<FooWithTracing> {
+class Value : public RefCounted<Value, PolymorphicRefCount, kUnrefNoDelete> {
  public:
-  FooWithTracing() : RefCountedWithTracing(&foo_tracer) {}
+  Value(int value, std::set<std::unique_ptr<Value>>* registry) : value_(value) {
+    registry->emplace(this);
+  }
+
+  int value() const { return value_; }
+
+ private:
+  int value_;
+};
+
+void GarbageCollectRegistry(std::set<std::unique_ptr<Value>>* registry) {
+  for (auto it = registry->begin(); it != registry->end();) {
+    RefCountedPtr<Value> v = (*it)->RefIfNonZero();
+    // Check if the object has any refs remaining.
+    if (v != nullptr) {
+      // It has refs remaining, so we do not delete it.
+      ++it;
+    } else {
+      // No refs remaining, so remove it from the registry.
+      it = registry->erase(it);
+    }
+  }
+}
+
+TEST(RefCounted, NoDeleteUponUnref) {
+  std::set<std::unique_ptr<Value>> registry;
+  // Add two objects to the registry.
+  auto v1 = MakeRefCounted<Value>(1, &registry);
+  auto v2 = MakeRefCounted<Value>(2, &registry);
+  EXPECT_THAT(registry,
+              ::testing::UnorderedElementsAre(
+                  ::testing::Pointee(::testing::Property(&Value::value, 1)),
+                  ::testing::Pointee(::testing::Property(&Value::value, 2))));
+  // Running garbage collection should not delete anything, since both
+  // entries still have refs.
+  GarbageCollectRegistry(&registry);
+  EXPECT_THAT(registry,
+              ::testing::UnorderedElementsAre(
+                  ::testing::Pointee(::testing::Property(&Value::value, 1)),
+                  ::testing::Pointee(::testing::Property(&Value::value, 2))));
+  // Unref v2 and run GC to remove it.
+  v2.reset();
+  GarbageCollectRegistry(&registry);
+  EXPECT_THAT(registry, ::testing::UnorderedElementsAre(::testing::Pointee(
+                            ::testing::Property(&Value::value, 1))));
+  // Now unref v1 and run GC again.
+  v1.reset();
+  GarbageCollectRegistry(&registry);
+  EXPECT_THAT(registry, ::testing::UnorderedElementsAre());
+}
+
+class ValueInExternalAllocation
+    : public RefCounted<ValueInExternalAllocation, PolymorphicRefCount,
+                        kUnrefCallDtor> {
+ public:
+  explicit ValueInExternalAllocation(int value) : value_(value) {}
+
+  int value() const { return value_; }
+
+ private:
+  int value_;
+};
+
+TEST(RefCounted, CallDtorUponUnref) {
+  std::aligned_storage<sizeof(ValueInExternalAllocation),
+                       alignof(ValueInExternalAllocation)>::type storage;
+  RefCountedPtr<ValueInExternalAllocation> value(
+      new (&storage) ValueInExternalAllocation(5));
+  EXPECT_EQ(value->value(), 5);
+}
+
+class FooNonPolymorphic
+    : public RefCounted<FooNonPolymorphic, NonPolymorphicRefCount> {
+ public:
+  FooNonPolymorphic() {
+    static_assert(!std::has_virtual_destructor<FooNonPolymorphic>::value,
+                  "NonPolymorphicRefCount has a virtual dtor");
+  }
+};
+
+TEST(RefCountedNonPolymorphic, Basic) {
+  FooNonPolymorphic* foo = new FooNonPolymorphic();
+  foo->Unref();
+}
+
+TEST(RefCountedNonPolymorphic, ExtraRef) {
+  FooNonPolymorphic* foo = new FooNonPolymorphic();
+  RefCountedPtr<FooNonPolymorphic> foop = foo->Ref();
+  foop.release();
+  foo->Unref();
+  foo->Unref();
+}
+
+class FooWithTracing : public RefCounted<FooWithTracing> {
+ public:
+  FooWithTracing() : RefCounted("Foo") {}
 };
 
 TEST(RefCountedWithTracing, Basic) {
-  FooWithTracing* foo = New<FooWithTracing>();
+  FooWithTracing* foo = new FooWithTracing();
   RefCountedPtr<FooWithTracing> foop = foo->Ref(DEBUG_LOCATION, "extra_ref");
+  foop.release();
+  foo->Unref(DEBUG_LOCATION, "extra_ref");
+  // Can use the no-argument methods, too.
+  foop = foo->Ref();
+  foop.release();
+  foo->Unref();
+  foo->Unref(DEBUG_LOCATION, "original_ref");
+}
+
+class FooNonPolymorphicWithTracing
+    : public RefCounted<FooNonPolymorphicWithTracing, NonPolymorphicRefCount> {
+ public:
+  FooNonPolymorphicWithTracing() : RefCounted("FooNonPolymorphicWithTracing") {}
+};
+
+TEST(RefCountedNonPolymorphicWithTracing, Basic) {
+  FooNonPolymorphicWithTracing* foo = new FooNonPolymorphicWithTracing();
+  RefCountedPtr<FooNonPolymorphicWithTracing> foop =
+      foo->Ref(DEBUG_LOCATION, "extra_ref");
   foop.release();
   foo->Unref(DEBUG_LOCATION, "extra_ref");
   // Can use the no-argument methods, too.
@@ -71,7 +187,7 @@ TEST(RefCountedWithTracing, Basic) {
 }  // namespace grpc_core
 
 int main(int argc, char** argv) {
-  grpc_test_init(argc, argv);
+  grpc::testing::TestEnvironment env(argc, argv);
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }

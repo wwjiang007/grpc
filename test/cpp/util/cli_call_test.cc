@@ -74,8 +74,8 @@ class CliCallTest : public ::testing::Test {
   void TearDown() override { server_->Shutdown(); }
 
   void ResetStub() {
-    channel_ =
-        CreateChannel(server_address_.str(), InsecureChannelCredentials());
+    channel_ = grpc::CreateChannel(server_address_.str(),
+                                   InsecureChannelCredentials());
     stub_ = grpc::testing::EchoTestService::NewStub(channel_);
   }
 
@@ -100,14 +100,14 @@ TEST_F(CliCallTest, SimpleRpc) {
   EXPECT_EQ(response.message(), request.message());
   EXPECT_TRUE(s.ok());
 
-  const grpc::string kMethod("/grpc.testing.EchoTestService/Echo");
-  grpc::string request_bin, response_bin, expected_response_bin;
+  const std::string kMethod("/grpc.testing.EchoTestService/Echo");
+  std::string request_bin, response_bin, expected_response_bin;
   EXPECT_TRUE(request.SerializeToString(&request_bin));
   EXPECT_TRUE(response.SerializeToString(&expected_response_bin));
-  std::multimap<grpc::string, grpc::string> client_metadata;
+  std::multimap<std::string, std::string> client_metadata;
   std::multimap<grpc::string_ref, grpc::string_ref> server_initial_metadata,
       server_trailing_metadata;
-  client_metadata.insert(std::pair<grpc::string, grpc::string>("key1", "val1"));
+  client_metadata.insert(std::pair<std::string, std::string>("key1", "val1"));
   Status s2 = CliCall::Call(channel_, kMethod, request_bin, &response_bin,
                             client_metadata, &server_initial_metadata,
                             &server_trailing_metadata);
@@ -122,7 +122,7 @@ TEST_F(CliCallTest, SimpleRpc) {
 }  // namespace grpc
 
 int main(int argc, char** argv) {
-  grpc_test_init(argc, argv);
+  grpc::testing::TestEnvironment env(argc, argv);
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }

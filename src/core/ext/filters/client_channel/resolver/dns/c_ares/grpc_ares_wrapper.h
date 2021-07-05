@@ -21,19 +21,26 @@
 
 #include <grpc/support/port_platform.h>
 
-#include "src/core/ext/filters/client_channel/lb_policy_factory.h"
+#include <ares.h>
+
+#include "src/core/ext/filters/client_channel/server_address.h"
 #include "src/core/lib/iomgr/iomgr.h"
 #include "src/core/lib/iomgr/polling_entity.h"
 #include "src/core/lib/iomgr/resolve_address.h"
+#include "src/core/lib/iomgr/work_serializer.h"
+
+#define GRPC_DNS_ARES_DEFAULT_QUERY_TIMEOUT_MS 120000
 
 extern grpc_core::TraceFlag grpc_trace_cares_address_sorting;
 
 extern grpc_core::TraceFlag grpc_trace_cares_resolver;
 
-#define GRPC_CARES_TRACE_LOG(format, ...)                         \
-  if (grpc_trace_cares_resolver.enabled()) {                      \
-    gpr_log(GPR_DEBUG, "(c-ares resolver) " format, __VA_ARGS__); \
-  }
+#define GRPC_CARES_TRACE_LOG(format, ...)                           \
+  do {                                                              \
+    if (GRPC_TRACE_FLAG_ENABLED(grpc_trace_cares_resolver)) {       \
+      gpr_log(GPR_DEBUG, "(c-ares resolver) " format, __VA_ARGS__); \
+    }                                                               \
+  } while (0)
 
 typedef struct grpc_ares_request grpc_ares_request;
 
@@ -54,19 +61,22 @@ extern void (*grpc_resolve_address_ares)(const char* name,
   port in \a name. grpc_ares_init() must be called at least once before this
   function. \a on_done may be called directly in this function without being
   scheduled with \a exec_ctx, so it must not try to acquire locks that are
-  being held by the caller. */
+  being held by the caller. The returned grpc_ares_request object is owned
+  by the caller and it is safe to free after on_done is called back. */
 extern grpc_ares_request* (*grpc_dns_lookup_ares_locked)(
     const char* dns_server, const char* name, const char* default_port,
     grpc_pollset_set* interested_parties, grpc_closure* on_done,
-    grpc_lb_addresses** addresses, bool check_grpclb,
-    char** service_config_json, grpc_combiner* combiner);
+    std::unique_ptr<grpc_core::ServerAddressList>* addresses,
+    std::unique_ptr<grpc_core::ServerAddressList>* balancer_addresses,
+    char** service_config_json, int query_timeout_ms,
+    std::shared_ptr<grpc_core::WorkSerializer> work_serializer);
 
 /* Cancel the pending grpc_ares_request \a request */
-void grpc_cancel_ares_request(grpc_ares_request* request);
+extern void (*grpc_cancel_ares_request_locked)(grpc_ares_request* request);
 
 /* Initialize gRPC ares wrapper. Must be called at least once before
    grpc_resolve_address_ares(). */
-grpc_error* grpc_ares_init(void);
+grpc_error_handle grpc_ares_init(void);
 
 /* Uninitialized gRPC ares wrapper. If there was more than one previous call to
    grpc_ares_init(), this function uninitializes the gRPC ares wrapper only if
@@ -81,15 +91,12 @@ void grpc_ares_complete_request_locked(grpc_ares_request* request);
 /* E.g., return false if ipv6 is known to not be available. */
 bool grpc_ares_query_ipv6();
 
-/* Maybe (depending on the current platform) checks if "name" matches
- * "localhost" and if so fills in addrs with the correct sockaddr structures.
- * Returns a bool indicating whether or not such an action was performed.
- * See https://github.com/grpc/grpc/issues/15158. */
-bool grpc_ares_maybe_resolve_localhost_manually_locked(
-    const char* name, const char* default_port, grpc_lb_addresses** addrs);
-
 /* Sorts destinations in lb_addrs according to RFC 6724. */
-void grpc_cares_wrapper_address_sorting_sort(grpc_lb_addresses* lb_addrs);
+void grpc_cares_wrapper_address_sorting_sort(
+    const grpc_ares_request* request, grpc_core::ServerAddressList* addresses);
+
+/* Exposed in this header for C-core tests only */
+extern void (*grpc_ares_test_only_inject_config)(ares_channel channel);
 
 #endif /* GRPC_CORE_EXT_FILTERS_CLIENT_CHANNEL_RESOLVER_DNS_C_ARES_GRPC_ARES_WRAPPER_H \
         */

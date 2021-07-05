@@ -28,13 +28,11 @@ cd build
 mkdir %ARCHITECTURE%
 cd %ARCHITECTURE%
 
-cmake -G "Visual Studio 14 2015" -A %ARCHITECTURE% -DgRPC_BUILD_TESTS=OFF -DgRPC_MSVC_STATIC_RUNTIME=ON ../../.. || goto :error
+cmake -G "Visual Studio 14 2015" -A %ARCHITECTURE% -DgRPC_BUILD_TESTS=OFF -DgRPC_MSVC_STATIC_RUNTIME=ON  -DgRPC_XDS_USER_AGENT_IS_CSHARP=ON ../../.. || goto :error
 
 cd ..\..\..\src\csharp
 
-if NOT DEFINED GRPC_SKIP_DOTNET_RESTORE (
-  dotnet restore Grpc.sln || goto :error
-)
+dotnet restore Grpc.sln || goto :error
 
 endlocal
 

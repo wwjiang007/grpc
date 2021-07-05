@@ -44,14 +44,17 @@ ProtoReflectionDescriptorDatabase::~ProtoReflectionDescriptorDatabase() {
     Status status = stream_->Finish();
     if (!status.ok()) {
       if (status.error_code() == StatusCode::UNIMPLEMENTED) {
-        gpr_log(GPR_INFO,
+        fprintf(stderr,
                 "Reflection request not implemented; "
-                "is the ServerReflection service enabled?");
+                "is the ServerReflection service enabled?\n");
+      } else {
+        fprintf(stderr,
+                "ServerReflectionInfo rpc failed. Error code: %d, message: %s, "
+                "debug info: %s\n",
+                static_cast<int>(status.error_code()),
+                status.error_message().c_str(),
+                ctx_.debug_error_string().c_str());
       }
-      gpr_log(GPR_INFO,
-              "ServerReflectionInfo rpc failed. Error code: %d, details: %s",
-              static_cast<int>(status.error_code()),
-              status.error_message().c_str());
     }
   }
 }
@@ -254,7 +257,7 @@ bool ProtoReflectionDescriptorDatabase::FindAllExtensionNumbers(
 }
 
 bool ProtoReflectionDescriptorDatabase::GetServices(
-    std::vector<grpc::string>* output) {
+    std::vector<std::string>* output) {
   ServerReflectionRequest request;
   request.set_list_services("");
   ServerReflectionResponse response;
@@ -287,9 +290,9 @@ bool ProtoReflectionDescriptorDatabase::GetServices(
   return false;
 }
 
-const protobuf::FileDescriptorProto
+protobuf::FileDescriptorProto
 ProtoReflectionDescriptorDatabase::ParseFileDescriptorProtoResponse(
-    const grpc::string& byte_fd_proto) {
+    const std::string& byte_fd_proto) {
   protobuf::FileDescriptorProto file_desc_proto;
   file_desc_proto.ParseFromString(byte_fd_proto);
   return file_desc_proto;
@@ -307,7 +310,7 @@ void ProtoReflectionDescriptorDatabase::AddFileFromResponse(
   }
 }
 
-const std::shared_ptr<ProtoReflectionDescriptorDatabase::ClientStream>
+std::shared_ptr<ProtoReflectionDescriptorDatabase::ClientStream>
 ProtoReflectionDescriptorDatabase::GetStream() {
   if (!stream_) {
     stream_ = stub_->ServerReflectionInfo(&ctx_);

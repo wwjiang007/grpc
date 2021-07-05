@@ -24,20 +24,23 @@ cd "$(dirname "$0")/../../.."
 submodules=$(mktemp /tmp/submXXXXXX)
 want_submodules=$(mktemp /tmp/submXXXXXX)
 
-git submodule | awk '{ print $1 }' | sort > "$submodules"
-cat << EOF | awk '{ print $1 }' | sort > "$want_submodules"
- cc4bed2d74f7c8717e31f9579214ab52a9c9c610 third_party/abseil-cpp (cc4bed2)
- 5b7683f49e1e9223cf9927b24f6fd3d6bd82e3f8 third_party/benchmark (v1.2.0)
- 73594cde8c9a52a102c4341c244c833aa61b9c06 third_party/bloaty (remotes/origin/wide-14-g73594cd)
- b29b21a81b32ec273f118f589f46d56ad3332420 third_party/boringssl (remotes/origin/chromium-stable)
- 8149b351bf797bd80e063787886b7618f508e451 third_party/boringssl-with-bazel (version_for_cocoapods_10.0-434-g8149b351)
- 3be1924221e1326df520f8498d704a5c4c8d0cce third_party/cares/cares (cares-1_13_0)
- 30dbc81fb5ffdc98ea9b14b1918bfe4e8779b26e third_party/gflags (v2.2.0-5-g30dbc81)
- ec44c6c1675c25b9827aacd08c02433cccde7780 third_party/googletest (release-1.8.0)
- 6599cac0965be8e5a835ab7a5684bbef033d5ad0 third_party/libcxx (heads/release_60)
- 9245d481eb3e890f708ff2d7dadf2a10c04748ba third_party/libcxxabi (heads/release_60)
- 48cb18e5c419ddd23d9badcfe4e9df7bde1979b2 third_party/protobuf (v3.6.0.1-37-g48cb18e5)
- cacf7f1d4e3d44d871b605da3b647f07d718623f third_party/zlib (v1.2.11)
+git submodule | awk '{ print $2 " " $1 }' | sort > "$submodules"
+cat << EOF | sort > "$want_submodules"
+third_party/abseil-cpp 997aaf3a28308eba1b9156aa35ab7bca9688e9f6
+third_party/benchmark 73d4d5e8d6d449fc8663765a42aa8aeeee844489
+third_party/bloaty 73594cde8c9a52a102c4341c244c833aa61b9c06
+third_party/boringssl-with-bazel bcc01b6c66b1c6fa2816b108e50a544b757fbd7b
+third_party/cares/cares e982924acee7f7313b4baa4ee5ec000c5e373c30
+third_party/envoy-api 18b54850c9b7ba29a4ab67cbd7ed7eab7b0bbdb2
+third_party/googleapis 82944da21578a53b74e547774cf62ed31a05b841
+third_party/googletest c9ccac7cb7345901884aabf5d1a786cfa6e2f397
+third_party/libuv 15ae750151ac9341e5945eb38f8982d59fb99201
+third_party/opencensus-proto 4aa53e15cbf1a47bc9087e6cfdca214c1eea4e89
+third_party/protobuf 436bd7880e458532901c58f4d9d1ea23fa7edd52
+third_party/protoc-gen-validate 872b28c457822ed9c2a5405da3c33f386ac0e86f
+third_party/re2 aecba11114cf1fac5497aeb844b6966106de3eb6
+third_party/udpa cc1b757b3eddccaaaf0743cbb107742bb7e3ee4f
+third_party/zlib cacf7f1d4e3d44d871b605da3b647f07d718623f
 EOF
 
 diff -u "$submodules" "$want_submodules"

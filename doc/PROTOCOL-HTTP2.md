@@ -31,12 +31,12 @@ Request-Headers are delivered as HTTP2 headers in HEADERS + CONTINUATION frames.
 * **Timeout** → "grpc-timeout" TimeoutValue TimeoutUnit
 * **TimeoutValue** → {_positive integer as ASCII string of at most 8 digits_}
 * **TimeoutUnit** → Hour / Minute / Second / Millisecond / Microsecond / Nanosecond
-* **Hour** → "H"
-* **Minute** → "M"
-* **Second** → "S"
-* **Millisecond** → "m"
-* **Microsecond** → "u"
-* **Nanosecond** → "n"
+  * **Hour** → "H"
+  * **Minute** → "M"
+  * **Second** → "S"
+  * **Millisecond** → "m"
+  * **Microsecond** → "u"
+  * **Nanosecond** → "n"
 * **Content-Type** → "content-type" "application/grpc" [("+proto" / "+json" / {_custom_})]
 * **Content-Coding** → "identity" / "gzip" / "deflate" / "snappy" / {_custom_}
 * <a name="message-encoding"></a>**Message-Encoding** → "grpc-encoding" Content-Coding
@@ -52,14 +52,16 @@ Request-Headers are delivered as HTTP2 headers in HEADERS + CONTINUATION frames.
 
 HTTP2 requires that reserved headers, ones starting with ":" appear before all other headers. Additionally implementations should send **Timeout** immediately after the reserved headers and they should send the **Call-Definition** headers before sending **Custom-Metadata**.
 
-Some gRPC implementations may allow the **Path** format shown above
-to be overridden, but this functionality is strongly discouraged.
-gRPC does not go out of its way to break users that are using this kind
-of override, but we do not actively support it, and some functionality
-(e.g., service config support) will not work when the path is not of
-the form shown above.
+**Path** is case-sensitive. Some gRPC implementations may allow the **Path**
+format shown above to be overridden, but this functionality is strongly
+discouraged. gRPC does not go out of its way to break users that are using this
+kind of override, but we do not actively support it, and some functionality
+(e.g., service config support) will not work when the path is not of the form
+shown above.
 
 If **Timeout** is omitted a server should assume an infinite timeout. Client implementations are free to send a default minimum timeout based on their deployment requirements.
+
+If **Content-Type** does not begin with "application/grpc", gRPC servers SHOULD respond with HTTP status of 415 (Unsupported Media Type).  This will prevent other HTTP/2 clients from interpreting a gRPC error response, which uses status 200 (OK), as successful.
 
 **Custom-Metadata** is an arbitrary set of key-value pairs defined by the application layer. Header names starting with "grpc-" but not listed here are reserved for future GRPC use and should not be used by applications as **Custom-Metadata**.
 
@@ -92,7 +94,7 @@ The repeated sequence of **Length-Prefixed-Message** items is delivered in DATA 
 
 * **Length-Prefixed-Message** → Compressed-Flag Message-Length Message
 * <a name="compressed-flag"></a>**Compressed-Flag** → 0 / 1   # encoded as 1 byte unsigned integer
-* **Message-Length** → {_length of Message_}  # encoded as 4 byte unsigned integer
+* **Message-Length** → {_length of Message_}  # encoded as 4 byte unsigned integer (big endian)
 * **Message** → \*{binary octet}
 
 A **Compressed-Flag** value of 1 indicates that the binary octet sequence of **Message** is compressed using the mechanism declared by the **Message-Encoding** header. A value of 0 indicates that no encoding of **Message** bytes has occurred. Compression contexts are NOT maintained over message boundaries, implementations must create a new context for each message in the stream. If the **Message-Encoding** header is omitted then the **Compressed-Flag** must be 0.
@@ -213,7 +215,7 @@ The following mapping from RST_STREAM error codes to GRPC error codes is applied
 
 HTTP2 Code|GRPC Code
 ----------|-----------
-NO_ERROR(0)|INTERNAL - An explicit GRPC status of OK should have been sent but this might be used to aggressively lameduck in some scenarios.
+NO_ERROR(0)|INTERNAL - An explicit GRPC status of OK should have been sent but this might be used to aggressively [lameduck](https://landing.google.com/sre/sre-book/chapters/load-balancing-datacenter/#identifying-bad-tasks-flow-control-and-lame-ducks-bEs0uy) in some scenarios.
 PROTOCOL_ERROR(1)|INTERNAL
 INTERNAL_ERROR(2)|INTERNAL
 FLOW_CONTROL_ERROR(3)|INTERNAL
@@ -255,5 +257,3 @@ to be used.
 * **Service-Name** → ?( {_proto package name_} "." ) {_service name_}
 * **Message-Type** → {_fully qualified proto message name_}
 * **Content-Type** → "application/grpc+proto"
-
-

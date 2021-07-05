@@ -130,9 +130,9 @@ def _run_stream_stream(stub):
     request_pipe = _Pipe()
     response_iterator = stub.StreStre(iter(request_pipe))
     request_pipe.add(_application_common.STREAM_STREAM_REQUEST)
-    first_responses = next(response_iterator), next(response_iterator),
+    first_responses = next(response_iterator), next(response_iterator)
     request_pipe.add(_application_common.STREAM_STREAM_REQUEST)
-    second_responses = next(response_iterator), next(response_iterator),
+    second_responses = next(response_iterator), next(response_iterator)
     request_pipe.close()
     try:
         next(response_iterator)
@@ -150,8 +150,8 @@ def _run_stream_stream(stub):
 
 def _run_concurrent_stream_unary(stub):
     future_calls = tuple(
-        stub.StreUn.future(
-            iter((_application_common.STREAM_UNARY_REQUEST,) * 3))
+        stub.StreUn.future(iter((_application_common.STREAM_UNARY_REQUEST,) *
+                                3))
         for _ in range(test_constants.THREAD_CONCURRENCY))
     for future_call in future_calls:
         if future_call.code() is grpc.StatusCode.OK:

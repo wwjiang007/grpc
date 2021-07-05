@@ -16,6 +16,8 @@
 # This script runs grpc/grpc-node tests with their grpc submodule updated
 # to this reference
 
+set -ex
+
 # cd to gRPC root directory
 cd "$(dirname "$0")/../../.."
 
@@ -25,4 +27,7 @@ rm -rf ./../grpc-node
 git clone --recursive https://github.com/grpc/grpc-node ./../grpc-node
 cd ./../grpc-node
 
-./test-grpc-submodule.sh "$CURRENT_COMMIT"
+echo "TODO(jtattermusch): Skipping grpc-node's ./test-grpc-submodule.sh $CURRENT_COMMIT"
+echo "because it currently doesn't provide any useful signal."
+echo "See b/152833238"
+#./test-grpc-submodule.sh "$CURRENT_COMMIT"

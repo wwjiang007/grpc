@@ -21,6 +21,7 @@
 
 #include <grpc/support/cpu.h>
 #include <grpc/support/log.h>
+#include <grpcpp/channel.h>
 #include <grpcpp/resource_quota.h>
 #include <grpcpp/security/server_credentials.h>
 #include <grpcpp/server_builder.h>
@@ -96,7 +97,7 @@ class Server {
   static std::shared_ptr<ServerCredentials> CreateServerCredentials(
       const ServerConfig& config) {
     if (config.has_security_params()) {
-      grpc::string type;
+      std::string type;
       if (config.security_params().cred_type().empty()) {
         type = kTlsCredentialsType;
       } else {
@@ -152,6 +153,7 @@ class Server {
 std::unique_ptr<Server> CreateSynchronousServer(const ServerConfig& config);
 std::unique_ptr<Server> CreateAsyncServer(const ServerConfig& config);
 std::unique_ptr<Server> CreateAsyncGenericServer(const ServerConfig& config);
+std::unique_ptr<Server> CreateCallbackServer(const ServerConfig& config);
 
 }  // namespace testing
 }  // namespace grpc

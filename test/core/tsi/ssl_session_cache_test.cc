@@ -72,8 +72,8 @@ class SessionTracker {
     return tsi::SslSessionPtr(cb(ssl_context_));
   }
 
-  static void DestroyExData(void* parent, void* ptr, CRYPTO_EX_DATA* ad,
-                            int index, long argl, void* argp) {
+  static void DestroyExData(void* /*parent*/, void* ptr, CRYPTO_EX_DATA* /*ad*/,
+                            int /*index*/, long /*argl*/, void* /*argp*/) {
     SessionExDataId* data = static_cast<SessionExDataId*>(ptr);
     data->tracker->alive_sessions_.erase(data->id);
     delete data;
@@ -145,7 +145,7 @@ TEST(SslSessionCacheTest, LruCache) {
 
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
-  grpc_test_init(argc, argv);
+  grpc::testing::TestEnvironment env(argc, argv);
   grpc_init();
   int ret = RUN_ALL_TESTS();
   grpc_shutdown();

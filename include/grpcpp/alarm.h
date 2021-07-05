@@ -16,8 +16,8 @@
  *
  */
 
-/// An Alarm posts the user provided tag to its associated completion queue upon
-/// expiry or cancellation.
+/// An Alarm posts the user-provided tag to its associated completion queue or
+/// invokes the user-provided function on expiry or cancellation.
 #ifndef GRPCPP_ALARM_H
 #define GRPCPP_ALARM_H
 
@@ -32,14 +32,13 @@
 
 namespace grpc {
 
-/// A thin wrapper around \a grpc_alarm (see / \a / src/core/surface/alarm.h).
-class Alarm : private GrpcLibraryCodegen {
+class Alarm : private ::grpc::GrpcLibraryCodegen {
  public:
   /// Create an unset completion queue alarm
   Alarm();
 
   /// Destroy the given completion queue alarm, cancelling it in the process.
-  ~Alarm();
+  ~Alarm() override;
 
   /// DEPRECATED: Create and set a completion queue alarm instance associated to
   /// \a cq.
@@ -49,17 +48,21 @@ class Alarm : private GrpcLibraryCodegen {
   /// internal::GrpcLibraryInitializer instance would need to be introduced
   /// here. \endinternal.
   template <typename T>
-  Alarm(CompletionQueue* cq, const T& deadline, void* tag) : Alarm() {
-    SetInternal(cq, TimePoint<T>(deadline).raw_time(), tag);
+  Alarm(::grpc::CompletionQueue* cq, const T& deadline, void* tag) : Alarm() {
+    SetInternal(cq, ::grpc::TimePoint<T>(deadline).raw_time(), tag);
   }
 
   /// Trigger an alarm instance on completion queue \a cq at the specified time.
   /// Once the alarm expires (at \a deadline) or it's cancelled (see \a Cancel),
   /// an event with tag \a tag will be added to \a cq. If the alarm expired, the
   /// event's success bit will be true, false otherwise (ie, upon cancellation).
+  //
+  // USAGE NOTE: This is frequently used to inject arbitrary tags into \a cq by
+  // setting an immediate deadline. Such usage allows synchronizing an external
+  // event with an application's \a grpc::CompletionQueue::Next loop.
   template <typename T>
-  void Set(CompletionQueue* cq, const T& deadline, void* tag) {
-    SetInternal(cq, TimePoint<T>(deadline).raw_time(), tag);
+  void Set(::grpc::CompletionQueue* cq, const T& deadline, void* tag) {
+    SetInternal(cq, ::grpc::TimePoint<T>(deadline).raw_time(), tag);
   }
 
   /// Alarms aren't copyable.
@@ -67,8 +70,8 @@ class Alarm : private GrpcLibraryCodegen {
   Alarm& operator=(const Alarm&) = delete;
 
   /// Alarms are movable.
-  Alarm(Alarm&& rhs) : alarm_(rhs.alarm_) { rhs.alarm_ = nullptr; }
-  Alarm& operator=(Alarm&& rhs) {
+  Alarm(Alarm&& rhs) noexcept : alarm_(rhs.alarm_) { rhs.alarm_ = nullptr; }
+  Alarm& operator=(Alarm&& rhs) noexcept {
     alarm_ = rhs.alarm_;
     rhs.alarm_ = nullptr;
     return *this;
@@ -78,35 +81,20 @@ class Alarm : private GrpcLibraryCodegen {
   /// has already fired has no effect.
   void Cancel();
 
-  /// NOTE: class experimental_type is not part of the public API of this class
-  /// TODO(vjpai): Move these contents to the public API of Alarm when
-  ///              they are no longer experimental
-  class experimental_type {
-   public:
-    explicit experimental_type(Alarm* alarm) : alarm_(alarm) {}
-
-    /// Set an alarm to invoke callback \a f. The argument to the callback
-    /// states whether the alarm expired at \a deadline (true) or was cancelled
-    /// (false)
-    template <typename T>
-    void Set(const T& deadline, std::function<void(bool)> f) {
-      alarm_->SetInternal(TimePoint<T>(deadline).raw_time(), std::move(f));
-    }
-
-   private:
-    Alarm* alarm_;
-  };
-
-  /// NOTE: The function experimental() is not stable public API. It is a view
-  /// to the experimental components of this class. It may be changed or removed
-  /// at any time.
-  experimental_type experimental() { return experimental_type(this); }
+  /// Set an alarm to invoke callback \a f. The argument to the callback
+  /// states whether the alarm expired at \a deadline (true) or was cancelled
+  /// (false)
+  template <typename T>
+  void Set(const T& deadline, std::function<void(bool)> f) {
+    SetInternal(::grpc::TimePoint<T>(deadline).raw_time(), std::move(f));
+  }
 
  private:
-  void SetInternal(CompletionQueue* cq, gpr_timespec deadline, void* tag);
+  void SetInternal(::grpc::CompletionQueue* cq, gpr_timespec deadline,
+                   void* tag);
   void SetInternal(gpr_timespec deadline, std::function<void(bool)> f);
 
-  internal::CompletionQueueTag* alarm_;
+  ::grpc::internal::CompletionQueueTag* alarm_;
 };
 
 }  // namespace grpc

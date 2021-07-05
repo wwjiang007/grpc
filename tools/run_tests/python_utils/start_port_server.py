@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # Copyright 2015 gRPC authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,8 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import urllib
-import jobset
+from __future__ import print_function
+
+from . import jobset
+
+import six.moves.urllib.request as request
 import logging
 import os
 import socket
@@ -22,7 +26,7 @@ import sys
 import tempfile
 import time
 
-# must be synchronized with test/core/utils/port_server_client.h
+# must be synchronized with test/core/util/port_server_client.h
 _PORT_SERVER_PORT = 32766
 
 
@@ -33,8 +37,8 @@ def start_port_server():
     # otherwise, leave it up
     try:
         version = int(
-            urllib.urlopen('http://localhost:%d/version_number' %
-                           _PORT_SERVER_PORT).read())
+            request.urlopen('http://localhost:%d/version_number' %
+                            _PORT_SERVER_PORT).read())
         logging.info('detected port server running version %d', version)
         running = True
     except Exception as e:
@@ -43,7 +47,7 @@ def start_port_server():
     if running:
         current_version = int(
             subprocess.check_output([
-                sys.executable,
+                sys.executable,  # use the same python binary as this process
                 os.path.abspath('tools/run_tests/python_utils/port_server.py'),
                 'dump_version'
             ]))
@@ -51,8 +55,8 @@ def start_port_server():
         running = (version >= current_version)
         if not running:
             logging.info('port_server version mismatch: killing the old one')
-            urllib.urlopen(
-                'http://localhost:%d/quitquitquit' % _PORT_SERVER_PORT).read()
+            request.urlopen('http://localhost:%d/quitquitquit' %
+                            _PORT_SERVER_PORT).read()
             time.sleep(1)
     if not running:
         fd, logfile = tempfile.mkstemp()
@@ -70,15 +74,20 @@ def start_port_server():
             # Working directory of port server needs to be outside of Jenkins
             # workspace to prevent file lock issues.
             tempdir = tempfile.mkdtemp()
-            port_server = subprocess.Popen(
-                args,
-                env=env,
-                cwd=tempdir,
-                creationflags=0x00000008,  # detached process
-                close_fds=True)
+            if sys.version_info.major == 2:
+                creationflags = 0x00000008  # detached process
+            else:
+                creationflags = 0  # DETACHED_PROCESS doesn't seem to work with python3
+            port_server = subprocess.Popen(args,
+                                           env=env,
+                                           cwd=tempdir,
+                                           creationflags=creationflags,
+                                           close_fds=True)
         else:
-            port_server = subprocess.Popen(
-                args, env=env, preexec_fn=os.setsid, close_fds=True)
+            port_server = subprocess.Popen(args,
+                                           env=env,
+                                           preexec_fn=os.setsid,
+                                           close_fds=True)
         time.sleep(1)
         # ensure port server is up
         waits = 0
@@ -92,8 +101,8 @@ def start_port_server():
                 # try one final time: maybe another build managed to start one
                 time.sleep(1)
                 try:
-                    urllib.urlopen(
-                        'http://localhost:%d/get' % _PORT_SERVER_PORT).read()
+                    request.urlopen('http://localhost:%d/get' %
+                                    _PORT_SERVER_PORT).read()
                     logging.info(
                         'last ditch attempt to contact port server succeeded')
                     break
@@ -101,11 +110,11 @@ def start_port_server():
                     logging.exception(
                         'final attempt to contact port server failed')
                     port_log = open(logfile, 'r').read()
-                    print port_log
+                    print(port_log)
                     sys.exit(1)
             try:
                 port_server_url = 'http://localhost:%d/get' % _PORT_SERVER_PORT
-                urllib.urlopen(port_server_url).read()
+                request.urlopen(port_server_url).read()
                 logging.info('port server is up and ready')
                 break
             except socket.timeout:
@@ -117,7 +126,8 @@ def start_port_server():
                 time.sleep(1)
                 waits += 1
             except:
-                logging.exception('error while contacting port server at "%s".'
-                                  'Will try killing it.', port_server_url)
+                logging.exception(
+                    'error while contacting port server at "%s".'
+                    'Will try killing it.', port_server_url)
                 port_server.kill()
                 raise

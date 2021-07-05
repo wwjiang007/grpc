@@ -21,8 +21,12 @@ cd $(dirname $0)/../../..
 source tools/internal_ci/helper_scripts/prepare_build_macos_rc
 source tools/internal_ci/helper_scripts/prepare_build_macos_interop_rc
 
-# using run_interop_tests.py without --use_docker, so we need to build first
-tools/run_tests/run_tests.py -l c++ -c opt --build_only
+# build C++ interop client and server
+mkdir -p cmake/build
+pushd cmake/build
+cmake -DgRPC_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Release ../..
+make interop_client interop_server -j4
+popd
 
 export GRPC_DEFAULT_SSL_ROOTS_FILE_PATH="$(pwd)/etc/roots.pem"
 
@@ -30,8 +34,11 @@ export GRPC_DEFAULT_SSL_ROOTS_FILE_PATH="$(pwd)/etc/roots.pem"
 # building all languages in the same working copy can also lead to conflicts
 # due to different compilation flags
 tools/run_tests/run_interop_tests.py -l c++ \
-    --cloud_to_prod --cloud_to_prod_auth --prod_servers default gateway_v4 \
-    --service_account_key_file="${KOKORO_GFILE_DIR}/GrpcTesting-726eb1347f15.json" \
+    --cloud_to_prod --cloud_to_prod_auth \
+    --google_default_creds_use_key_file \
+    --prod_servers default gateway_v4 \
+    --service_account_key_file="${KOKORO_KEYSTORE_DIR}/73836_interop_to_prod_tests_service_account_key" \
+    --default_service_account="interop-to-prod-tests@grpc-testing.iam.gserviceaccount.com" \
     --skip_compute_engine_creds --internal_ci -t -j 4 || FAILED="true"
 
 tools/internal_ci/helper_scripts/delete_nonartifacts.sh || true

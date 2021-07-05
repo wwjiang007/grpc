@@ -15,6 +15,7 @@
 
 import unittest
 import weakref
+import logging
 
 import grpc
 from grpc import _channel
@@ -176,15 +177,16 @@ class MetadataTest(unittest.TestCase):
 
     def setUp(self):
         self._server = test_common.test_server()
-        self._server.add_generic_rpc_handlers((_GenericHandler(
-            weakref.proxy(self)),))
+        self._server.add_generic_rpc_handlers(
+            (_GenericHandler(weakref.proxy(self)),))
         port = self._server.add_insecure_port('[::]:0')
         self._server.start()
-        self._channel = grpc.insecure_channel(
-            'localhost:%d' % port, options=_CHANNEL_ARGS)
+        self._channel = grpc.insecure_channel('localhost:%d' % port,
+                                              options=_CHANNEL_ARGS)
 
     def tearDown(self):
         self._server.stop(0)
+        self._channel.close()
 
     def testUnaryUnary(self):
         multi_callable = self._channel.unary_unary(_UNARY_UNARY)
@@ -223,9 +225,8 @@ class MetadataTest(unittest.TestCase):
 
     def testStreamStream(self):
         multi_callable = self._channel.stream_stream(_STREAM_STREAM)
-        call = multi_callable(
-            iter([_REQUEST] * test_constants.STREAM_LENGTH),
-            metadata=_INVOCATION_METADATA)
+        call = multi_callable(iter([_REQUEST] * test_constants.STREAM_LENGTH),
+                              metadata=_INVOCATION_METADATA)
         self.assertTrue(
             test_common.metadata_transmitted(_EXPECTED_INITIAL_METADATA,
                                              call.initial_metadata()))
@@ -237,4 +238,5 @@ class MetadataTest(unittest.TestCase):
 
 
 if __name__ == '__main__':
+    logging.basicConfig()
     unittest.main(verbosity=2)

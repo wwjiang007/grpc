@@ -43,10 +43,13 @@ class BaseStub
      */
     public function __construct($hostname, $opts, $channel = null)
     {
-        $ssl_roots = file_get_contents(
-            dirname(__FILE__).'/../../../../etc/roots.pem'
-        );
-        ChannelCredentials::setDefaultRootsPem($ssl_roots);
+        if (!method_exists('ChannelCredentials', 'isDefaultRootsPemSet') ||
+            !ChannelCredentials::isDefaultRootsPemSet()) {
+            $ssl_roots = file_get_contents(
+                dirname(__FILE__).'/../../../../etc/roots.pem'
+            );
+            ChannelCredentials::setDefaultRootsPem($ssl_roots);
+        }
 
         $this->hostname = $hostname;
         $this->update_metadata = null;
@@ -83,18 +86,22 @@ class BaseStub
     }
 
     private static function updateOpts($opts) {
-        if (!file_exists($composerFile = __DIR__.'/../../composer.json')) {
-            // for grpc/grpc-php subpackage
-            $composerFile = __DIR__.'/../composer.json';
-        }
-        $package_config = json_decode(file_get_contents($composerFile), true);
         if (!empty($opts['grpc.primary_user_agent'])) {
             $opts['grpc.primary_user_agent'] .= ' ';
         } else {
             $opts['grpc.primary_user_agent'] = '';
         }
-        $opts['grpc.primary_user_agent'] .=
-            'grpc-php/'.$package_config['version'];
+        if (defined('\Grpc\VERSION')) {
+            $version_str = \Grpc\VERSION;
+        } else {
+            if (!file_exists($composerFile = __DIR__.'/../../composer.json')) {
+                // for grpc/grpc-php subpackage
+                $composerFile = __DIR__.'/../composer.json';
+            }
+            $package_config = json_decode(file_get_contents($composerFile), true);
+            $version_str = $package_config['version'];
+        }
+        $opts['grpc.primary_user_agent'] .= 'grpc-php/'.$version_str;
         if (!array_key_exists('credentials', $opts)) {
             throw new \Exception("The opts['credentials'] key is now ".
                 'required. Please see one of the '.
@@ -199,6 +206,13 @@ class BaseStub
      */
     private function _get_jwt_aud_uri($method)
     {
+        // TODO(jtattermusch): This is not the correct implementation
+        // of extracting JWT "aud" claim. We should rely on
+        // grpc_metadata_credentials_plugin which
+        // also provides the correct value of "aud" claim
+        // in the grpc_auth_metadata_context.service_url field.
+        // Trying to do the construction of "aud" field ourselves
+        // is bad.
         $last_slash_idx = strrpos($method, '/');
         if ($last_slash_idx === false) {
             throw new \InvalidArgumentException(
@@ -211,6 +225,12 @@ class BaseStub
             $hostname = $this->hostname_override;
         } else {
             $hostname = $this->hostname;
+        }
+
+        // Remove the port if it is 443
+        // See https://github.com/grpc/grpc/blob/07c9f7a36b2a0d34fcffebc85649cf3b8c339b5d/src/core/lib/security/transport/client_auth_filter.cc#L205
+        if ((strlen($hostname) > 4) && (substr($hostname, -4) === ":443")) {
+            $hostname = substr($hostname, 0, -4);
         }
 
         return 'https://'.$hostname.$service_name;
@@ -228,10 +248,10 @@ class BaseStub
     {
         $metadata_copy = [];
         foreach ($metadata as $key => $value) {
-            if (!preg_match('/^[A-Za-z\d_-]+$/', $key)) {
+            if (!preg_match('/^[.A-Za-z\d_-]+$/', $key)) {
                 throw new \InvalidArgumentException(
                     'Metadata keys must be nonempty strings containing only '.
-                    'alphanumeric characters, hyphens and underscores'
+                    'alphanumeric characters, hyphens, underscores and dots'
                 );
             }
             $metadata_copy[strtolower($key)] = $value;
@@ -407,9 +427,9 @@ class BaseStub
                     $method,
                     $argument,
                     $deserialize,
+                    $this->_UnaryUnaryCallFactory($channel->getNext()),
                     $metadata,
-                    $options,
-                    $this->_UnaryUnaryCallFactory($channel->getNext())
+                    $options
                 );
             };
         }
@@ -436,9 +456,9 @@ class BaseStub
                     $method,
                     $argument,
                     $deserialize,
+                    $this->_UnaryStreamCallFactory($channel->getNext()),
                     $metadata,
-                    $options,
-                    $this->_UnaryStreamCallFactory($channel->getNext())
+                    $options
                 );
             };
         }
@@ -463,9 +483,9 @@ class BaseStub
                 return $channel->getInterceptor()->interceptStreamUnary(
                     $method,
                     $deserialize,
+                    $this->_StreamUnaryCallFactory($channel->getNext()),
                     $metadata,
-                    $options,
-                    $this->_StreamUnaryCallFactory($channel->getNext())
+                    $options
                 );
             };
         }
@@ -490,9 +510,9 @@ class BaseStub
                 return $channel->getInterceptor()->interceptStreamStream(
                     $method,
                     $deserialize,
+                    $this->_StreamStreamCallFactory($channel->getNext()),
                     $metadata,
-                    $options,
-                    $this->_StreamStreamCallFactory($channel->getNext())
+                    $options
                 );
             };
         }

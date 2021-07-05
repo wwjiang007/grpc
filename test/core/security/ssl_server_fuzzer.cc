@@ -23,25 +23,28 @@
 #include "src/core/lib/iomgr/load_file.h"
 #include "src/core/lib/security/credentials/credentials.h"
 #include "src/core/lib/security/security_connector/security_connector.h"
-#include "test/core/end2end/data/ssl_test_data.h"
-#include "test/core/util/memory_counters.h"
 #include "test/core/util/mock_endpoint.h"
+
+#define CA_CERT_PATH "src/core/tsi/test_creds/ca.pem"
+#define SERVER_CERT_PATH "src/core/tsi/test_creds/server1.pem"
+#define SERVER_KEY_PATH "src/core/tsi/test_creds/server1.key"
 
 bool squelch = true;
 // ssl has an array of global gpr_mu's that are never released.
 // Turning this on will fail the leak check.
 bool leak_check = false;
 
-static void discard_write(grpc_slice slice) {}
+static void discard_write(grpc_slice /*slice*/) {}
 
-static void dont_log(gpr_log_func_args* args) {}
+static void dont_log(gpr_log_func_args* /*args*/) {}
 
 struct handshake_state {
   bool done_callback_called;
 };
 
-static void on_handshake_done(void* arg, grpc_error* error) {
-  grpc_handshaker_args* args = static_cast<grpc_handshaker_args*>(arg);
+static void on_handshake_done(void* arg, grpc_error_handle error) {
+  grpc_core::HandshakerArgs* args =
+      static_cast<grpc_core::HandshakerArgs*>(arg);
   struct handshake_state* state =
       static_cast<struct handshake_state*>(args->user_data);
   GPR_ASSERT(state->done_callback_called == false);
@@ -51,9 +54,7 @@ static void on_handshake_done(void* arg, grpc_error* error) {
 }
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
-  struct grpc_memory_counters counters;
   if (squelch) gpr_set_log_function(dont_log);
-  if (leak_check) grpc_memory_counters_init();
   grpc_init();
   {
     grpc_core::ExecCtx exec_ctx;
@@ -68,34 +69,40 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
         mock_endpoint, grpc_slice_from_copied_buffer((const char*)data, size));
 
     // Load key pair and establish server SSL credentials.
-    grpc_ssl_pem_key_cert_pair pem_key_cert_pair;
     grpc_slice ca_slice, cert_slice, key_slice;
-    ca_slice = grpc_slice_from_static_string(test_root_cert);
-    cert_slice = grpc_slice_from_static_string(test_server1_cert);
-    key_slice = grpc_slice_from_static_string(test_server1_key);
-    const char* ca_cert = (const char*)GRPC_SLICE_START_PTR(ca_slice);
-    pem_key_cert_pair.private_key =
-        (const char*)GRPC_SLICE_START_PTR(key_slice);
-    pem_key_cert_pair.cert_chain =
-        (const char*)GRPC_SLICE_START_PTR(cert_slice);
+    GPR_ASSERT(GRPC_LOG_IF_ERROR("load_file",
+                                 grpc_load_file(CA_CERT_PATH, 1, &ca_slice)));
+    GPR_ASSERT(GRPC_LOG_IF_ERROR(
+        "load_file", grpc_load_file(SERVER_CERT_PATH, 1, &cert_slice)));
+    GPR_ASSERT(GRPC_LOG_IF_ERROR(
+        "load_file", grpc_load_file(SERVER_KEY_PATH, 1, &key_slice)));
+    const char* ca_cert =
+        reinterpret_cast<const char*> GRPC_SLICE_START_PTR(ca_slice);
+    const char* server_cert =
+        reinterpret_cast<const char*> GRPC_SLICE_START_PTR(cert_slice);
+    const char* server_key =
+        reinterpret_cast<const char*> GRPC_SLICE_START_PTR(key_slice);
+    grpc_ssl_pem_key_cert_pair pem_key_cert_pair = {server_key, server_cert};
     grpc_server_credentials* creds = grpc_ssl_server_credentials_create(
         ca_cert, &pem_key_cert_pair, 1, 0, nullptr);
+    grpc_slice_unref(cert_slice);
+    grpc_slice_unref(key_slice);
+    grpc_slice_unref(ca_slice);
 
     // Create security connector
-    grpc_server_security_connector* sc = nullptr;
-    grpc_security_status status =
-        grpc_server_credentials_create_security_connector(creds, &sc);
-    GPR_ASSERT(status == GRPC_SECURITY_OK);
+    grpc_core::RefCountedPtr<grpc_server_security_connector> sc =
+        creds->create_security_connector(nullptr);
+    GPR_ASSERT(sc != nullptr);
     grpc_millis deadline = GPR_MS_PER_SEC + grpc_core::ExecCtx::Get()->Now();
 
     struct handshake_state state;
     state.done_callback_called = false;
-    grpc_handshake_manager* handshake_mgr = grpc_handshake_manager_create();
-    grpc_server_security_connector_add_handshakers(sc, handshake_mgr);
-    grpc_handshake_manager_do_handshake(
-        handshake_mgr, nullptr /* interested_parties */, mock_endpoint,
-        nullptr /* channel_args */, deadline, nullptr /* acceptor */,
-        on_handshake_done, &state);
+    auto handshake_mgr =
+        grpc_core::MakeRefCounted<grpc_core::HandshakeManager>();
+    sc->add_handshakers(nullptr, nullptr, handshake_mgr.get());
+    handshake_mgr->DoHandshake(mock_endpoint, nullptr /* channel_args */,
+                               deadline, nullptr /* acceptor */,
+                               on_handshake_done, &state);
     grpc_core::ExecCtx::Get()->Flush();
 
     // If the given string happens to be part of the correct client hello, the
@@ -110,20 +117,11 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
 
     GPR_ASSERT(state.done_callback_called);
 
-    grpc_handshake_manager_destroy(handshake_mgr);
-    GRPC_SECURITY_CONNECTOR_UNREF(&sc->base, "test");
+    sc.reset(DEBUG_LOCATION, "test");
     grpc_server_credentials_release(creds);
-    grpc_slice_unref(cert_slice);
-    grpc_slice_unref(key_slice);
-    grpc_slice_unref(ca_slice);
     grpc_core::ExecCtx::Get()->Flush();
   }
 
   grpc_shutdown();
-  if (leak_check) {
-    counters = grpc_memory_counters_snapshot();
-    grpc_memory_counters_destroy();
-    GPR_ASSERT(counters.total_size_relative == 0);
-  }
   return 0;
 }

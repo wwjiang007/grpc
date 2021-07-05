@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-FROM debian:jessie
+FROM debian:buster
 
 # Install Git and basic packages.
 RUN apt-get update && apt-get install -y \
@@ -57,27 +57,30 @@ RUN apt-get update && apt-get install -y time && apt-get clean
 RUN apt-get update && apt-get install -y \
     python-all-dev \
     python3-all-dev \
-    python-pip
+    python-setuptools
 
 # Install Python packages from PyPI
-RUN pip install --upgrade pip==10.0.1
-RUN pip install virtualenv
-RUN pip install futures==2.2.0 enum34==1.0.4 protobuf==3.5.2.post1 six==1.10.0 twisted==17.5.0
+RUN curl https://bootstrap.pypa.io/pip/2.7/get-pip.py | python2.7
+RUN pip install --upgrade pip==19.3.1
+RUN pip install virtualenv==16.7.9
+RUN pip install futures==2.2.0 enum34==1.0.4 protobuf==3.5.2.post1 six==1.15.0 twisted==17.5.0
 
 #==================
 # Ruby dependencies
 
 # Install rvm
-RUN gpg --keyserver hkp://keys.gnupg.net --recv-keys 409B6B1796C275462A1703113804BB82D39DC0E3
+RUN apt-get update && apt-get install -y gnupg2 && apt-get clean
+RUN gpg2 --keyserver hkp://pool.sks-keyservers.net --recv-keys 409B6B1796C275462A1703113804BB82D39DC0E3 7D2BAF1CF37B13E2069D6956105BD0E739499BDB
 RUN \curl -sSL https://get.rvm.io | bash -s stable
 
-# Install Ruby 2.1
-RUN /bin/bash -l -c "rvm install ruby-2.1"
-RUN /bin/bash -l -c "rvm use --default ruby-2.1"
-RUN /bin/bash -l -c "echo 'gem: --no-ri --no-rdoc' > ~/.gemrc"
+# Install Ruby 2.5
+RUN apt-get update && apt-get install -y procps && apt-get clean
+RUN /bin/bash -l -c "rvm install ruby-2.5"
+RUN /bin/bash -l -c "rvm use --default ruby-2.5"
+RUN /bin/bash -l -c "echo 'gem: --no-document' > ~/.gemrc"
 RUN /bin/bash -l -c "echo 'export PATH=/usr/local/rvm/bin:$PATH' >> ~/.bashrc"
-RUN /bin/bash -l -c "echo 'rvm --default use ruby-2.1' >> ~/.bashrc"
-RUN /bin/bash -l -c "gem install bundler --no-ri --no-rdoc"
+RUN /bin/bash -l -c "echo 'rvm --default use ruby-2.5' >> ~/.bashrc"
+RUN /bin/bash -l -c "gem install bundler --no-document -v 1.9"
 
 
 RUN mkdir /var/local/jenkins

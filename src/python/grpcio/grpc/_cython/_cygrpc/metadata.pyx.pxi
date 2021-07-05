@@ -15,11 +15,17 @@
 import collections
 
 
+class InitialMetadataFlags:
+  used_mask = GRPC_INITIAL_METADATA_USED_MASK
+  wait_for_ready = GRPC_INITIAL_METADATA_WAIT_FOR_READY
+  wait_for_ready_explicitly_set = GRPC_INITIAL_METADATA_WAIT_FOR_READY_EXPLICITLY_SET
+
+
 _Metadatum = collections.namedtuple('_Metadatum', ('key', 'value',))
 
 
 cdef void _store_c_metadata(
-    metadata, grpc_metadata **c_metadata, size_t *c_count):
+    metadata, grpc_metadata **c_metadata, size_t *c_count) except *:
   if metadata is None:
     c_count[0] = 0
     c_metadata[0] = NULL
@@ -35,11 +41,16 @@ cdef void _store_c_metadata(
       for index, (key, value) in enumerate(metadata):
         encoded_key = _encode(key)
         encoded_value = value if encoded_key[-4:] == b'-bin' else _encode(value)
+        if not isinstance(encoded_value, bytes):
+          raise TypeError('Binary metadata key="%s" expected bytes, got %s' % (
+            key,
+            type(encoded_value)
+          ))
         c_metadata[0][index].key = _slice_from_bytes(encoded_key)
         c_metadata[0][index].value = _slice_from_bytes(encoded_value)
 
 
-cdef void _release_c_metadata(grpc_metadata *c_metadata, int count):
+cdef void _release_c_metadata(grpc_metadata *c_metadata, int count) except *:
   if 0 < count:
     for index in range(count):
       grpc_slice_unref(c_metadata[index].key)

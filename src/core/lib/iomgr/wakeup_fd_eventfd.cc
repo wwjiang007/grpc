@@ -31,17 +31,16 @@
 #include "src/core/lib/iomgr/wakeup_fd_posix.h"
 #include "src/core/lib/profiling/timers.h"
 
-static grpc_error* eventfd_create(grpc_wakeup_fd* fd_info) {
-  int efd = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
-  if (efd < 0) {
+static grpc_error_handle eventfd_create(grpc_wakeup_fd* fd_info) {
+  fd_info->read_fd = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
+  fd_info->write_fd = -1;
+  if (fd_info->read_fd < 0) {
     return GRPC_OS_ERROR(errno, "eventfd");
   }
-  fd_info->read_fd = efd;
-  fd_info->write_fd = -1;
   return GRPC_ERROR_NONE;
 }
 
-static grpc_error* eventfd_consume(grpc_wakeup_fd* fd_info) {
+static grpc_error_handle eventfd_consume(grpc_wakeup_fd* fd_info) {
   eventfd_t value;
   int err;
   do {
@@ -53,7 +52,7 @@ static grpc_error* eventfd_consume(grpc_wakeup_fd* fd_info) {
   return GRPC_ERROR_NONE;
 }
 
-static grpc_error* eventfd_wakeup(grpc_wakeup_fd* fd_info) {
+static grpc_error_handle eventfd_wakeup(grpc_wakeup_fd* fd_info) {
   GPR_TIMER_SCOPE("eventfd_wakeup", 0);
   int err;
   do {

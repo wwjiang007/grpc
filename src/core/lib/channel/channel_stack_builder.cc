@@ -40,6 +40,7 @@ struct grpc_channel_stack_builder {
   // various set/get-able parameters
   grpc_channel_args* args;
   grpc_transport* transport;
+  grpc_resource_user* resource_user;
   char* target;
   const char* name;
 };
@@ -157,6 +158,11 @@ void grpc_channel_stack_builder_set_channel_arguments(
   builder->args = grpc_channel_args_copy(args);
 }
 
+const grpc_channel_args* grpc_channel_stack_builder_get_channel_arguments(
+    grpc_channel_stack_builder* builder) {
+  return builder->args;
+}
+
 void grpc_channel_stack_builder_set_transport(
     grpc_channel_stack_builder* builder, grpc_transport* transport) {
   GPR_ASSERT(builder->transport == nullptr);
@@ -168,9 +174,15 @@ grpc_transport* grpc_channel_stack_builder_get_transport(
   return builder->transport;
 }
 
-const grpc_channel_args* grpc_channel_stack_builder_get_channel_arguments(
+void grpc_channel_stack_builder_set_resource_user(
+    grpc_channel_stack_builder* builder, grpc_resource_user* resource_user) {
+  GPR_ASSERT(builder->resource_user == nullptr);
+  builder->resource_user = resource_user;
+}
+
+grpc_resource_user* grpc_channel_stack_builder_get_resource_user(
     grpc_channel_stack_builder* builder) {
-  return builder->args;
+  return builder->resource_user;
 }
 
 bool grpc_channel_stack_builder_append_filter(
@@ -255,7 +267,7 @@ void grpc_channel_stack_builder_destroy(grpc_channel_stack_builder* builder) {
   gpr_free(builder);
 }
 
-grpc_error* grpc_channel_stack_builder_finish(
+grpc_error_handle grpc_channel_stack_builder_finish(
     grpc_channel_stack_builder* builder, size_t prefix_bytes, int initial_refs,
     grpc_iomgr_cb_func destroy, void* destroy_arg, void** result) {
   // count the number of filters
@@ -282,7 +294,7 @@ grpc_error* grpc_channel_stack_builder_finish(
   grpc_channel_stack* channel_stack = reinterpret_cast<grpc_channel_stack*>(
       static_cast<char*>(*result) + prefix_bytes);
   // and initialize it
-  grpc_error* error = grpc_channel_stack_init(
+  grpc_error_handle error = grpc_channel_stack_init(
       initial_refs, destroy, destroy_arg == nullptr ? *result : destroy_arg,
       filters, num_filters, builder->args, builder->transport, builder->name,
       channel_stack);

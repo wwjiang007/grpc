@@ -21,8 +21,4 @@ cd $(dirname $0)/../../..
 
 CPUS=`python -c 'import multiprocessing; print multiprocessing.cpu_count()'`
 
-make CONFIG=opt memory_profile_test memory_profile_client memory_profile_server -j $CPUS
-bins/opt/memory_profile_test
-bq load microbenchmarks.memory memory_usage.csv
-
 tools/run_tests/run_microbenchmark.py --collect summary --bigquery_upload

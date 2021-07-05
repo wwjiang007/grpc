@@ -36,40 +36,43 @@
 
 #include <map>
 #include <memory>
-#include <mutex>
 #include <string>
 
 #include <grpc/impl/codegen/compression_types.h>
 #include <grpc/impl/codegen/propagation_bits.h>
+#include <grpcpp/impl/codegen/client_interceptor.h>
 #include <grpcpp/impl/codegen/config.h>
 #include <grpcpp/impl/codegen/core_codegen_interface.h>
 #include <grpcpp/impl/codegen/create_auth_context.h>
 #include <grpcpp/impl/codegen/metadata_map.h>
+#include <grpcpp/impl/codegen/rpc_method.h>
 #include <grpcpp/impl/codegen/security/auth_context.h>
 #include <grpcpp/impl/codegen/slice.h>
 #include <grpcpp/impl/codegen/status.h>
 #include <grpcpp/impl/codegen/string_ref.h>
+#include <grpcpp/impl/codegen/sync.h>
 #include <grpcpp/impl/codegen/time.h>
 
 struct census_context;
 struct grpc_call;
 
 namespace grpc {
-
-class Channel;
-class ChannelInterface;
-class CompletionQueue;
-class CallCredentials;
-class ClientContext;
+class ServerContext;
+class ServerContextBase;
+class CallbackServerContext;
 
 namespace internal {
-class RpcMethod;
-class CallOpClientRecvStatus;
-class CallOpRecvInitialMetadata;
-template <class InputMessage, class OutputMessage>
-class BlockingUnaryCallImpl;
 template <class InputMessage, class OutputMessage>
 class CallbackUnaryCallImpl;
+template <class Request, class Response>
+class ClientCallbackReaderWriterImpl;
+template <class Response>
+class ClientCallbackReaderImpl;
+template <class Request>
+class ClientCallbackWriterImpl;
+class ClientCallbackUnaryImpl;
+class ClientContextAccessor;
+class ClientAsyncResponseReaderHelper;
 }  // namespace internal
 
 template <class R>
@@ -86,7 +89,35 @@ template <class W, class R>
 class ClientAsyncReaderWriter;
 template <class R>
 class ClientAsyncResponseReader;
-class ServerContext;
+
+namespace testing {
+class InteropClientContextInspector;
+class ClientContextTestPeer;
+}  // namespace testing
+
+namespace internal {
+class RpcMethod;
+template <class InputMessage, class OutputMessage>
+class BlockingUnaryCallImpl;
+class CallOpClientRecvStatus;
+class CallOpRecvInitialMetadata;
+class ServerContextImpl;
+template <class InputMessage, class OutputMessage>
+class CallbackUnaryCallImpl;
+template <class Request, class Response>
+class ClientCallbackReaderWriterImpl;
+template <class Response>
+class ClientCallbackReaderImpl;
+template <class Request>
+class ClientCallbackWriterImpl;
+class ClientCallbackUnaryImpl;
+class ClientContextAccessor;
+}  // namespace internal
+
+class CallCredentials;
+class Channel;
+class ChannelInterface;
+class CompletionQueue;
 
 /// Options for \a ClientContext::FromServerContext specifying which traits from
 /// the \a ServerContext to propagate (copy) from it into a new \a
@@ -143,10 +174,6 @@ class PropagationOptions {
   uint32_t propagate_;
 };
 
-namespace testing {
-class InteropClientContextInspector;
-}  // namespace testing
-
 /// A ClientContext allows the person implementing a service client to:
 ///
 /// - Add custom metadata key-value pairs that will propagated to the server
@@ -161,6 +188,8 @@ class InteropClientContextInspector;
 /// (see \a grpc::CreateCustomChannel).
 ///
 /// \warning ClientContext instances should \em not be reused across rpcs.
+/// \warning The ClientContext instance used for creating an rpc must remain
+///          alive and valid for the lifetime of the rpc.
 class ClientContext {
  public:
   ClientContext();
@@ -177,7 +206,10 @@ class ClientContext {
   /// \return A newly constructed \a ClientContext instance based on \a
   /// server_context, with traits propagated (copied) according to \a options.
   static std::unique_ptr<ClientContext> FromServerContext(
-      const ServerContext& server_context,
+      const grpc::ServerContextBase& server_context,
+      PropagationOptions options = PropagationOptions());
+  static std::unique_ptr<ClientContext> FromCallbackServerContext(
+      const grpc::CallbackServerContext& server_context,
       PropagationOptions options = PropagationOptions());
 
   /// Add the (\a meta_key, \a meta_value) pair to the metadata associated with
@@ -190,8 +222,14 @@ class ClientContext {
   /// end in "-bin".
   /// \param meta_value The metadata value. If its value is binary, the key name
   /// must end in "-bin".
-  void AddMetadata(const grpc::string& meta_key,
-                   const grpc::string& meta_value);
+  ///
+  /// Metadata must conform to the following format:
+  /// Custom-Metadata -> Binary-Header / ASCII-Header
+  /// Binary-Header -> {Header-Name "-bin" } {binary value}
+  /// ASCII-Header -> Header-Name ASCII-Value
+  /// Header-Name -> 1*( %x30-39 / %x61-7A / "_" / "-" / ".") ; 0-9 a-z _ - .
+  /// ASCII-Value -> 1*( %x20-%x7E ) ; space and printable ASCII
+  void AddMetadata(const std::string& meta_key, const std::string& meta_value);
 
   /// Return a collection of initial metadata key-value pairs. Note that keys
   /// may happen more than once (ie, a \a std::multimap is returned).
@@ -224,10 +262,10 @@ class ClientContext {
   /// \warning This method should only be called before invoking the rpc.
   ///
   /// \param deadline the deadline for the client call. Units are determined by
-  /// the type used.
+  /// the type used. The deadline is an absolute (not relative) time.
   template <typename T>
   void set_deadline(const T& deadline) {
-    TimePoint<T> deadline_tp(deadline);
+    grpc::TimePoint<T> deadline_tp(deadline);
     deadline_ = deadline_tp.raw_time();
   }
 
@@ -259,7 +297,7 @@ class ClientContext {
 
   /// Return the deadline for the client call.
   std::chrono::system_clock::time_point deadline() const {
-    return Timespec2Timepoint(deadline_);
+    return grpc::Timespec2Timepoint(deadline_);
   }
 
   /// Return a \a gpr_timespec representation of the client call's deadline.
@@ -267,14 +305,15 @@ class ClientContext {
 
   /// Set the per call authority header (see
   /// https://tools.ietf.org/html/rfc7540#section-8.1.2.3).
-  void set_authority(const grpc::string& authority) { authority_ = authority; }
+  void set_authority(const std::string& authority) { authority_ = authority; }
 
-  /// Return the authentication context for this client call.
+  /// Return the authentication context for the associated client call.
+  /// It is only valid to call this during the lifetime of the client call.
   ///
   /// \see grpc::AuthContext.
-  std::shared_ptr<const AuthContext> auth_context() const {
-    if (auth_context_.get() == nullptr) {
-      auth_context_ = CreateAuthContext(call_);
+  std::shared_ptr<const grpc::AuthContext> auth_context() const {
+    if (auth_context_ == nullptr) {
+      auth_context_ = grpc::CreateAuthContext(call_);
     }
     return auth_context_;
   }
@@ -286,10 +325,17 @@ class ClientContext {
   /// client’s identity, role, or whether it is authorized to make a particular
   /// call.
   ///
+  /// It is legal to call this only before initial metadata is sent.
+  ///
   /// \see  https://grpc.io/docs/guides/auth.html
-  void set_credentials(const std::shared_ptr<CallCredentials>& creds) {
-    creds_ = creds;
-  }
+  void set_credentials(const std::shared_ptr<grpc::CallCredentials>& creds);
+
+  /// EXPERIMENTAL debugging API
+  ///
+  /// Returns the credentials for the client call. This should be used only in
+  /// tests and for diagnostic purposes, and should not be used by application
+  /// logic.
+  std::shared_ptr<grpc::CallCredentials> credentials() { return creds_; }
 
   /// Return the compression algorithm the client call will request be used.
   /// Note that the gRPC runtime may decide to ignore this request, for example,
@@ -318,16 +364,22 @@ class ClientContext {
   }
 
   /// Return the peer uri in a string.
+  /// It is only valid to call this during the lifetime of the client call.
   ///
   /// \warning This value is never authenticated or subject to any security
   /// related code. It must not be used for any authentication related
   /// functionality. Instead, use auth_context.
   ///
   /// \return The call's peer URI.
-  grpc::string peer() const;
+  std::string peer() const;
 
-  /// Get and set census context.
+  /// Sets the census context.
+  /// It is only valid to call this before the client call is created. A common
+  /// place of setting census context is from within the DefaultConstructor
+  /// method of GlobalCallbacks.
   void set_census_context(struct census_context* ccp) { census_context_ = ccp; }
+
+  /// Returns the census context that has been set, or nullptr if not set.
   struct census_context* census_context() const {
     return census_context_;
   }
@@ -364,7 +416,7 @@ class ClientContext {
   /// if status is not ok() for an RPC, this will return a detailed string
   /// of the gRPC Core error that led to the failure. It should not be relied
   /// upon for anything other than gaining more debug data in failure cases.
-  grpc::string debug_error_string() const { return debug_error_string_; }
+  std::string debug_error_string() const { return debug_error_string_; }
 
  private:
   // Disallow copy and assign.
@@ -372,9 +424,10 @@ class ClientContext {
   ClientContext& operator=(const ClientContext&);
 
   friend class ::grpc::testing::InteropClientContextInspector;
+  friend class ::grpc::testing::ClientContextTestPeer;
   friend class ::grpc::internal::CallOpClientRecvStatus;
   friend class ::grpc::internal::CallOpRecvInitialMetadata;
-  friend class Channel;
+  friend class ::grpc::Channel;
   template <class R>
   friend class ::grpc::ClientReader;
   template <class W>
@@ -389,18 +442,40 @@ class ClientContext {
   friend class ::grpc::ClientAsyncReaderWriter;
   template <class R>
   friend class ::grpc::ClientAsyncResponseReader;
+  friend class ::grpc::internal::ClientAsyncResponseReaderHelper;
   template <class InputMessage, class OutputMessage>
   friend class ::grpc::internal::BlockingUnaryCallImpl;
   template <class InputMessage, class OutputMessage>
   friend class ::grpc::internal::CallbackUnaryCallImpl;
+  template <class Request, class Response>
+  friend class ::grpc::internal::ClientCallbackReaderWriterImpl;
+  template <class Response>
+  friend class ::grpc::internal::ClientCallbackReaderImpl;
+  template <class Request>
+  friend class ::grpc::internal::ClientCallbackWriterImpl;
+  friend class ::grpc::internal::ClientCallbackUnaryImpl;
+  friend class ::grpc::internal::ClientContextAccessor;
 
   // Used by friend class CallOpClientRecvStatus
-  void set_debug_error_string(const grpc::string& debug_error_string) {
+  void set_debug_error_string(const std::string& debug_error_string) {
     debug_error_string_ = debug_error_string;
   }
 
   grpc_call* call() const { return call_; }
-  void set_call(grpc_call* call, const std::shared_ptr<Channel>& channel);
+  void set_call(grpc_call* call,
+                const std::shared_ptr<::grpc::Channel>& channel);
+
+  grpc::experimental::ClientRpcInfo* set_client_rpc_info(
+      const char* method, const char* suffix_for_stats,
+      grpc::internal::RpcMethod::RpcType type, grpc::ChannelInterface* channel,
+      const std::vector<std::unique_ptr<
+          grpc::experimental::ClientInterceptorFactoryInterface>>& creators,
+      size_t interceptor_pos) {
+    rpc_info_ = grpc::experimental::ClientRpcInfo(this, type, method,
+                                                  suffix_for_stats, channel);
+    rpc_info_.RegisterInterceptors(creators, interceptor_pos);
+    return &rpc_info_;
+  }
 
   uint32_t initial_metadata_flags() const {
     return (idempotent_ ? GRPC_INITIAL_METADATA_IDEMPOTENT_REQUEST : 0) |
@@ -412,25 +487,31 @@ class ClientContext {
            (initial_metadata_corked_ ? GRPC_INITIAL_METADATA_CORKED : 0);
   }
 
-  grpc::string authority() { return authority_; }
+  std::string authority() { return authority_; }
+
+  void SendCancelToInterceptors();
+
+  static std::unique_ptr<ClientContext> FromInternalServerContext(
+      const grpc::ServerContextBase& server_context,
+      PropagationOptions options);
 
   bool initial_metadata_received_;
   bool wait_for_ready_;
   bool wait_for_ready_explicitly_set_;
   bool idempotent_;
   bool cacheable_;
-  std::shared_ptr<Channel> channel_;
-  std::mutex mu_;
+  std::shared_ptr<::grpc::Channel> channel_;
+  grpc::internal::Mutex mu_;
   grpc_call* call_;
   bool call_canceled_;
   gpr_timespec deadline_;
   grpc::string authority_;
-  std::shared_ptr<CallCredentials> creds_;
-  mutable std::shared_ptr<const AuthContext> auth_context_;
+  std::shared_ptr<grpc::CallCredentials> creds_;
+  mutable std::shared_ptr<const grpc::AuthContext> auth_context_;
   struct census_context* census_context_;
-  std::multimap<grpc::string, grpc::string> send_initial_metadata_;
-  mutable internal::MetadataMap recv_initial_metadata_;
-  mutable internal::MetadataMap trailing_metadata_;
+  std::multimap<std::string, std::string> send_initial_metadata_;
+  mutable grpc::internal::MetadataMap recv_initial_metadata_;
+  mutable grpc::internal::MetadataMap trailing_metadata_;
 
   grpc_call* propagate_from_call_;
   PropagationOptions propagation_options_;
@@ -438,7 +519,9 @@ class ClientContext {
   grpc_compression_algorithm compression_algorithm_;
   bool initial_metadata_corked_;
 
-  grpc::string debug_error_string_;
+  std::string debug_error_string_;
+
+  grpc::experimental::ClientRpcInfo rpc_info_;
 };
 
 }  // namespace grpc

@@ -17,6 +17,7 @@ from __future__ import print_function
 
 import random
 import time
+import logging
 
 import grpc
 
@@ -46,9 +47,9 @@ def guide_get_one_feature(route_guide_stub, point):
 
 
 def guide_get_feature(route_guide_stub):
-    guide_get_one_feature(route_guide_stub,
-                          route_guide_pb2.Point(
-                              latitude=409146138, longitude=-746188906))
+    guide_get_one_feature(
+        route_guide_stub,
+        route_guide_pb2.Point(latitude=409146138, longitude=-746188906))
     guide_get_one_feature(route_guide_stub,
                           route_guide_pb2.Point(latitude=0, longitude=0))
 
@@ -101,8 +102,8 @@ def generate_messages():
 def guide_route_chat(route_guide_stub):
     responses = route_guide_stub.RouteChat(generate_messages())
     for response in responses:
-        print("Received message %s at %s" % (response.message,
-                                             response.location))
+        print("Received message %s at %s" %
+              (response.message, response.location))
 
 
 def run():
@@ -126,4 +127,5 @@ def run():
 
 
 if __name__ == '__main__':
+    logging.basicConfig()
     run()

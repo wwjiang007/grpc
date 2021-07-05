@@ -14,7 +14,7 @@
 
 licenses(["notice"])  # Apache v2
 
-load("//bazel:grpc_build_system.bzl", "grpc_cc_library", "grpc_cc_binary", "grpc_cc_test", "grpc_package")
+load("//bazel:grpc_build_system.bzl", "grpc_cc_binary", "grpc_cc_library", "grpc_cc_test", "grpc_package")
 
 grpc_package(
     name = "test/cpp/util",
@@ -30,7 +30,7 @@ grpc_cc_library(
         "test_config.h",
     ],
     external_deps = [
-        "gflags",
+        "absl/flags:parse",
     ],
     deps = [
         "//:gpr",
@@ -75,6 +75,7 @@ grpc_cc_library(
         "test_credentials_provider.h",
     ],
     external_deps = [
+        "absl/flags:flag",
         "protobuf",
     ],
     deps = [
@@ -93,13 +94,13 @@ grpc_cc_library(
     hdrs = [
         "channel_trace_proto_helper.h",
     ],
-    deps = [
-        "//:grpc++",
-        "//src/proto/grpc/channelz:channelz_proto",
-    ],
     external_deps = [
         "gtest",
         "protobuf",
+    ],
+    deps = [
+        "//:grpc++",
+        "//src/proto/grpc/channelz:channelz_proto",
     ],
 )
 
@@ -117,11 +118,10 @@ grpc_cc_library(
 )
 
 grpc_cc_library(
-    name = "grpc_cli_libs",
+    name = "grpc_cli_utils",
     srcs = [
         "cli_call.cc",
         "cli_credentials.cc",
-        "grpc_tool.cc",
         "proto_file_parser.cc",
         "service_describer.cc",
     ],
@@ -129,12 +129,11 @@ grpc_cc_library(
         "cli_call.h",
         "cli_credentials.h",
         "config_grpc_cli.h",
-        "grpc_tool.h",
         "proto_file_parser.h",
         "service_describer.h",
     ],
     external_deps = [
-        "gflags",
+        "absl/flags:flag",
         "protobuf",
         "protobuf_clib",
     ],
@@ -142,6 +141,22 @@ grpc_cc_library(
         ":grpc++_proto_reflection_desc_db",
         "//:grpc++",
         "//src/proto/grpc/reflection/v1alpha:reflection_proto",
+    ],
+)
+
+grpc_cc_library(
+    name = "grpc_cli_libs",
+    srcs = [
+        "grpc_tool.cc",
+    ],
+    hdrs = [
+        "grpc_tool.h",
+    ],
+    external_deps = [
+        "absl/flags:flag",
+    ],
+    deps = [
+        ":grpc_cli_utils",
     ],
 )
 
@@ -165,11 +180,21 @@ grpc_cc_test(
         "grpc_tool_test.cc",
     ],
     data = [
+        "//src/core/tsi/test_creds:ca.pem",
+        "//src/core/tsi/test_creds:server1.key",
+        "//src/core/tsi/test_creds:server1.pem",
         "//src/proto/grpc/testing:echo.proto",
         "//src/proto/grpc/testing:echo_messages.proto",
+        "//src/proto/grpc/testing:simple_messages.proto",
     ],
     external_deps = [
+        "absl/flags:flag",
         "gtest",
+    ],
+    tags = [
+        "no_test_ios",
+        "no_windows",
+        "nomsan",  # death tests seem to be incompatible with msan
     ],
     deps = [
         ":grpc_cli_libs",
@@ -177,7 +202,7 @@ grpc_cc_test(
         "//:grpc++_reflection",
         "//src/proto/grpc/testing:echo_messages_proto",
         "//src/proto/grpc/testing:echo_proto",
-        "//test/core/end2end:ssl_test_data",
+        "//src/proto/grpc/testing:simple_messages_proto",
         "//test/core/util:grpc_test_util",
     ],
 )
@@ -190,6 +215,7 @@ grpc_cc_test(
     external_deps = [
         "gtest",
     ],
+    uses_polling = False,
     deps = [
         ":test_util",
     ],
@@ -203,6 +229,7 @@ grpc_cc_test(
     external_deps = [
         "gtest",
     ],
+    uses_polling = False,
     deps = [
         ":test_util",
     ],
@@ -216,9 +243,10 @@ grpc_cc_test(
     external_deps = [
         "gtest",
     ],
+    uses_polling = False,
     deps = [
         "//:grpc++",
-        "//test/core/util:gpr_test_util",
+        "//test/core/util:grpc_test_util",
     ],
 )
 
@@ -230,6 +258,7 @@ grpc_cc_test(
     external_deps = [
         "gtest",
     ],
+    uses_polling = False,
     deps = [
         ":test_util",
     ],
@@ -259,10 +288,12 @@ grpc_cc_test(
     external_deps = [
         "gtest",
     ],
+    tags = ["no_test_ios"],
     deps = [
         "//:grpc++_error_details",
+        "//src/proto/grpc/status:status_proto",
         "//src/proto/grpc/testing:echo_messages_proto",
-        "//test/core/util:gpr_test_util",
+        "//test/core/util:grpc_test_util",
     ],
 )
 
@@ -272,13 +303,63 @@ grpc_cc_binary(
         "grpc_cli.cc",
     ],
     external_deps = [
-        "gflags",
+        "absl/flags:flag",
     ],
     deps = [
-        ":grpc_cli_libs",
         ":grpc++_proto_reflection_desc_db",
+        ":grpc_cli_libs",
         ":test_config",
         "//:grpc++",
         "//src/proto/grpc/reflection/v1alpha:reflection_proto",
+    ],
+)
+
+grpc_cc_binary(
+    name = "channelz_sampler",
+    srcs = ["channelz_sampler.cc"],
+    external_deps = [
+        "absl/flags:flag",
+    ],
+    language = "c++",
+    tags = [
+        "no_windows",  # unistd.h
+    ],
+    deps = [
+        "//:gpr",
+        "//:grpc++",
+        "//:grpcpp_channelz",
+        "//src/proto/grpc/channelz:channelz_proto",
+        "//test/cpp/util:test_config",
+        "//test/cpp/util:test_util",
+    ],
+)
+
+grpc_cc_test(
+    name = "channelz_sampler_test",
+    srcs = [
+        "channelz_sampler_test.cc",
+    ],
+    data = [
+        ":channelz_sampler",
+    ],
+    external_deps = [
+        "gtest",
+    ],
+    tags = [
+        "no_mac",  # cmake does not build channelz_sampler in Basic Tests C/C++ MacOS test
+        "no_test_android",  # android_cc_test doesn't work with data dependency.
+        "no_test_ios",
+        "no_windows",  # unistd.h
+    ],
+    deps = [
+        "//:gpr",
+        "//:grpc",
+        "//:grpc++",
+        "//:grpcpp_channelz",
+        "//src/proto/grpc/channelz:channelz_proto",
+        "//src/proto/grpc/testing:test_proto",
+        "//test/core/util:grpc_test_util",
+        "//test/core/util:grpc_test_util_base",
+        "//test/cpp/util:test_util",
     ],
 )

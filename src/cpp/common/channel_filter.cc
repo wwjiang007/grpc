@@ -30,7 +30,6 @@ namespace grpc {
 grpc_linked_mdelem* MetadataBatch::AddMetadata(const string& key,
                                                const string& value) {
   grpc_linked_mdelem* storage = new grpc_linked_mdelem;
-  memset(storage, 0, sizeof(grpc_linked_mdelem));
   storage->md = grpc_mdelem_from_slices(SliceFromCopiedString(key),
                                         SliceFromCopiedString(value));
   GRPC_LOG_IF_ERROR("MetadataBatch::AddMetadata",
@@ -88,7 +87,7 @@ void ChannelFilterPluginInit() {
   for (size_t i = 0; i < channel_filters->size(); ++i) {
     FilterRecord& filter = (*channel_filters)[i];
     grpc_channel_init_register_stage(filter.stack_type, filter.priority,
-                                     MaybeAddFilter, (void*)&filter);
+                                     MaybeAddFilter, &filter);
   }
 }
 

@@ -30,10 +30,17 @@ namespace Grpc.Core.Internal
         void OnComplete(bool success);
     }
 
+    internal interface IBufferReader
+    {
+        int? TotalLength { get; }
+
+        bool TryGetNextSlice(out Slice slice);
+    }
+
     /// <summary>
     /// grpcsharp_batch_context
     /// </summary>
-    internal class BatchContextSafeHandle : SafeHandleZeroIsInvalid, IOpCompletionCallback, IPooledObject<BatchContextSafeHandle>
+    internal class BatchContextSafeHandle : SafeHandleZeroIsInvalid, IOpCompletionCallback, IPooledObject<BatchContextSafeHandle>, IBufferReader
     {
         static readonly NativeMethods Native = NativeMethods.Get();
         static readonly ILogger Logger = GrpcEnvironment.Logger.ForType<BatchContextSafeHandle>();
@@ -85,7 +92,8 @@ namespace Grpc.Core.Internal
             UIntPtr detailsLength;
             IntPtr detailsPtr = Native.grpcsharp_batch_context_recv_status_on_client_details(this, out detailsLength);
             string details = MarshalUtils.PtrToStringUTF8(detailsPtr, (int)detailsLength.ToUInt32());
-            var status = new Status(Native.grpcsharp_batch_context_recv_status_on_client_status(this), details);
+            string debugErrorString = Marshal.PtrToStringAnsi(Native.grpcsharp_batch_context_recv_status_on_client_error_string(this));
+            var status = new Status(Native.grpcsharp_batch_context_recv_status_on_client_status(this), details, debugErrorString != null ? new CoreErrorDetailException(debugErrorString) : null);
 
             IntPtr metadataArrayPtr = Native.grpcsharp_batch_context_recv_status_on_client_trailing_metadata(this);
             var metadata = MetadataArraySafeHandle.ReadMetadataFromPtrUnsafe(metadataArrayPtr);
@@ -93,17 +101,9 @@ namespace Grpc.Core.Internal
             return new ClientSideStatus(status, metadata);
         }
 
-        // Gets data of recv_message completion.
-        public byte[] GetReceivedMessage()
+        public IBufferReader GetReceivedMessageReader()
         {
-            IntPtr len = Native.grpcsharp_batch_context_recv_message_length(this);
-            if (len == new IntPtr(-1))
-            {
-                return null;
-            }
-            byte[] data = new byte[(int)len];
-            Native.grpcsharp_batch_context_recv_message_to_buffer(this, data, new UIntPtr((ulong)data.Length));
-            return data;
+            return this;
         }
 
         // Gets data of receive_close_on_server completion.
@@ -151,6 +151,29 @@ namespace Grpc.Core.Internal
                 completionCallbackData = default(CompletionCallbackData);
                 Recycle();
             }
+        }
+
+        int? IBufferReader.TotalLength
+        {
+            get
+            {
+                var len = Native.grpcsharp_batch_context_recv_message_length(this);
+                return len != new IntPtr(-1) ? (int?) len : null;
+            }
+        }
+
+        bool IBufferReader.TryGetNextSlice(out Slice slice)
+        {
+            UIntPtr sliceLen;
+            IntPtr sliceDataPtr;
+
+            if (0 == Native.grpcsharp_batch_context_recv_message_next_slice_peek(this, out sliceLen, out sliceDataPtr))
+            {
+                slice = default(Slice);
+                return false;
+            }
+            slice = new Slice(sliceDataPtr, (int) sliceLen);
+            return true;
         }
 
         struct CompletionCallbackData

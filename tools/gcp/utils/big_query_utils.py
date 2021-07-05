@@ -13,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import print_function
+
 import argparse
 import json
 import uuid
@@ -31,8 +33,10 @@ def create_big_query():
     """Authenticates with cloud platform and gets a BiqQuery service object
   """
     creds = GoogleCredentials.get_application_default()
-    return discovery.build(
-        'bigquery', 'v2', credentials=creds, cache_discovery=False)
+    return discovery.build('bigquery',
+                           'v2',
+                           credentials=creds,
+                           cache_discovery=False)
 
 
 def create_dataset(biq_query, project_id, dataset_id):
@@ -45,16 +49,16 @@ def create_dataset(biq_query, project_id, dataset_id):
     }
 
     try:
-        dataset_req = biq_query.datasets().insert(
-            projectId=project_id, body=body)
+        dataset_req = biq_query.datasets().insert(projectId=project_id,
+                                                  body=body)
         dataset_req.execute(num_retries=NUM_RETRIES)
     except HttpError as http_error:
         if http_error.resp.status == 409:
-            print 'Warning: The dataset %s already exists' % dataset_id
+            print('Warning: The dataset %s already exists' % dataset_id)
         else:
             # Note: For more debugging info, print "http_error.content"
-            print 'Error in creating dataset: %s. Err: %s' % (dataset_id,
-                                                              http_error)
+            print('Error in creating dataset: %s. Err: %s' %
+                  (dataset_id, http_error))
             is_success = False
     return is_success
 
@@ -119,16 +123,17 @@ def create_table2(big_query,
         }
 
     try:
-        table_req = big_query.tables().insert(
-            projectId=project_id, datasetId=dataset_id, body=body)
+        table_req = big_query.tables().insert(projectId=project_id,
+                                              datasetId=dataset_id,
+                                              body=body)
         res = table_req.execute(num_retries=NUM_RETRIES)
-        print 'Successfully created %s "%s"' % (res['kind'], res['id'])
+        print('Successfully created %s "%s"' % (res['kind'], res['id']))
     except HttpError as http_error:
         if http_error.resp.status == 409:
-            print 'Warning: Table %s already exists' % table_id
+            print('Warning: Table %s already exists' % table_id)
         else:
-            print 'Error in creating table: %s. Err: %s' % (table_id,
-                                                            http_error)
+            print('Error in creating table: %s. Err: %s' %
+                  (table_id, http_error))
             is_success = False
     return is_success
 
@@ -148,15 +153,14 @@ def patch_table(big_query, project_id, dataset_id, table_id, fields_schema):
     }
 
     try:
-        table_req = big_query.tables().patch(
-            projectId=project_id,
-            datasetId=dataset_id,
-            tableId=table_id,
-            body=body)
+        table_req = big_query.tables().patch(projectId=project_id,
+                                             datasetId=dataset_id,
+                                             tableId=table_id,
+                                             body=body)
         res = table_req.execute(num_retries=NUM_RETRIES)
-        print 'Successfully patched %s "%s"' % (res['kind'], res['id'])
+        print('Successfully patched %s "%s"' % (res['kind'], res['id']))
     except HttpError as http_error:
-        print 'Error in creating table: %s. Err: %s' % (table_id, http_error)
+        print('Error in creating table: %s. Err: %s' % (table_id, http_error))
         is_success = False
     return is_success
 
@@ -165,17 +169,17 @@ def insert_rows(big_query, project_id, dataset_id, table_id, rows_list):
     is_success = True
     body = {'rows': rows_list}
     try:
-        insert_req = big_query.tabledata().insertAll(
-            projectId=project_id,
-            datasetId=dataset_id,
-            tableId=table_id,
-            body=body)
+        insert_req = big_query.tabledata().insertAll(projectId=project_id,
+                                                     datasetId=dataset_id,
+                                                     tableId=table_id,
+                                                     body=body)
         res = insert_req.execute(num_retries=NUM_RETRIES)
         if res.get('insertErrors', None):
-            print 'Error inserting rows! Response: %s' % res
+            print('Error inserting rows! Response: %s' % res)
             is_success = False
     except HttpError as http_error:
-        print 'Error inserting rows to the table %s' % table_id
+        print('Error inserting rows to the table %s' % table_id)
+        print('Error message: %s' % http_error)
         is_success = False
 
     return is_success
@@ -189,8 +193,8 @@ def sync_query_job(big_query, project_id, query, timeout=5000):
             projectId=project_id,
             body=query_data).execute(num_retries=NUM_RETRIES)
     except HttpError as http_error:
-        print 'Query execute job failed with error: %s' % http_error
-        print http_error.content
+        print('Query execute job failed with error: %s' % http_error)
+        print(http_error.content)
     return query_job
 
 

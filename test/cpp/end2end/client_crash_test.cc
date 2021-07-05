@@ -26,6 +26,8 @@
 #include <grpcpp/server_builder.h>
 #include <grpcpp/server_context.h>
 
+#include "absl/memory/memory.h"
+
 #include "src/proto/grpc/testing/duplicate/echo_duplicate.grpc.pb.h"
 #include "src/proto/grpc/testing/echo.grpc.pb.h"
 #include "test/core/util/port.h"
@@ -36,7 +38,6 @@
 
 using grpc::testing::EchoRequest;
 using grpc::testing::EchoResponse;
-using std::chrono::system_clock;
 
 static std::string g_root;
 
@@ -54,13 +55,13 @@ class CrashTest : public ::testing::Test {
     std::ostringstream addr_stream;
     addr_stream << "localhost:" << port;
     auto addr = addr_stream.str();
-    server_.reset(new SubProcess({
+    server_ = absl::make_unique<SubProcess>(std::vector<std::string>({
         g_root + "/client_crash_test_server",
         "--address=" + addr,
     }));
     GPR_ASSERT(server_);
     return grpc::testing::EchoTestService::NewStub(
-        CreateChannel(addr, InsecureChannelCredentials()));
+        grpc::CreateChannel(addr, InsecureChannelCredentials()));
   }
 
   void KillServer() { server_.reset(); }
@@ -135,7 +136,7 @@ int main(int argc, char** argv) {
     g_root = ".";
   }
 
-  grpc_test_init(argc, argv);
+  grpc::testing::TestEnvironment env(argc, argv);
   ::testing::InitGoogleTest(&argc, argv);
   // Order seems to matter on these tests: run three times to eliminate that
   for (int i = 0; i < 3; i++) {

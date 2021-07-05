@@ -23,13 +23,16 @@
 
 #include "src/core/lib/iomgr/port.h"
 
+#include <grpc/event_engine/event_engine.h>
 #include <grpc/support/time.h>
+
 #include "src/core/lib/iomgr/exec_ctx.h"
 #include "src/core/lib/iomgr/iomgr.h"
 
 typedef struct grpc_timer {
   grpc_millis deadline;
-  uint32_t heap_index; /* INVALID_HEAP_INDEX if not in heap */
+  // Uninitialized if not using heap, or INVALID_HEAP_INDEX if not in heap.
+  uint32_t heap_index;
   bool pending;
   struct grpc_timer* next;
   struct grpc_timer* prev;
@@ -39,7 +42,10 @@ typedef struct grpc_timer {
 #endif
 
   // Optional field used by custom timers
-  void* custom_timer;
+  union {
+    void* custom_timer;
+    grpc_event_engine::experimental::EventEngine::TaskHandle ee_task_handle;
+  };
 } grpc_timer;
 
 typedef enum {

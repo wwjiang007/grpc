@@ -1,6 +1,6 @@
 /*
  *
- * Copyright 2015 gRPC authors.
+ * Copyright 2019 gRPC authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,7 +13,6 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- *
  */
 
 #ifndef GRPCPP_IMPL_CODEGEN_ASYNC_STREAM_H
@@ -27,8 +26,6 @@
 #include <grpcpp/impl/codegen/status.h>
 
 namespace grpc {
-
-class CompletionQueue;
 
 namespace internal {
 /// Common interface for all client side asynchronous streaming.
@@ -53,7 +50,7 @@ class ClientAsyncStreamingInterface {
   /// when the call has been ended.
   /// Should not be used concurrently with other operations.
   ///
-  /// It is appropriate to call this method when both:
+  /// It is appropriate to call this method exactly once when both:
   ///   * the client side has no more message to send
   ///     (this can be declared implicitly by calling this method, or
   ///     explicitly through an earlier call to the <i>WritesDone</i> method
@@ -76,7 +73,7 @@ class ClientAsyncStreamingInterface {
   ///
   /// \param[in] tag Tag identifying this request.
   /// \param[out] status To be updated with the operation status.
-  virtual void Finish(Status* status, void* tag) = 0;
+  virtual void Finish(::grpc::Status* status, void* tag) = 0;
 };
 
 /// An interface that yields a sequence of messages of type \a R.
@@ -136,7 +133,7 @@ class AsyncWriterInterface {
   /// \param[in] msg The message to be written.
   /// \param[in] options The WriteOptions to be used to write this message.
   /// \param[in] tag The tag identifying the operation.
-  virtual void Write(const W& msg, WriteOptions options, void* tag) = 0;
+  virtual void Write(const W& msg, ::grpc::WriteOptions options, void* tag) = 0;
 
   /// Request the writing of \a msg and coalesce it with the writing
   /// of trailing metadata, using WriteOptions \a options with
@@ -156,7 +153,7 @@ class AsyncWriterInterface {
   /// \param[in] msg The message to be written.
   /// \param[in] options The WriteOptions to be used to write this message.
   /// \param[in] tag The tag identifying the operation.
-  void WriteLast(const W& msg, WriteOptions options, void* tag) {
+  void WriteLast(const W& msg, ::grpc::WriteOptions options, void* tag) {
     Write(msg, options.set_last_message(), tag);
   }
 };
@@ -180,13 +177,13 @@ class ClientAsyncReaderFactory {
   /// Note that \a context will be used to fill in custom initial metadata
   /// used to send to the server when starting the call.
   template <class W>
-  static ClientAsyncReader<R>* Create(ChannelInterface* channel,
-                                      CompletionQueue* cq,
+  static ClientAsyncReader<R>* Create(::grpc::ChannelInterface* channel,
+                                      ::grpc::CompletionQueue* cq,
                                       const ::grpc::internal::RpcMethod& method,
-                                      ClientContext* context, const W& request,
-                                      bool start, void* tag) {
+                                      ::grpc::ClientContext* context,
+                                      const W& request, bool start, void* tag) {
     ::grpc::internal::Call call = channel->CreateCall(method, context, cq);
-    return new (g_core_codegen_interface->grpc_call_arena_alloc(
+    return new (::grpc::g_core_codegen_interface->grpc_call_arena_alloc(
         call.call(), sizeof(ClientAsyncReader<R>)))
         ClientAsyncReader<R>(call, context, request, start, tag);
   }
@@ -200,8 +197,8 @@ template <class R>
 class ClientAsyncReader final : public ClientAsyncReaderInterface<R> {
  public:
   // always allocated against a call arena, no memory free required
-  static void operator delete(void* ptr, std::size_t size) {
-    assert(size == sizeof(ClientAsyncReader));
+  static void operator delete(void* /*ptr*/, std::size_t size) {
+    GPR_CODEGEN_ASSERT(size == sizeof(ClientAsyncReader));
   }
 
   // This operator should never be called as the memory should be freed as part
@@ -209,10 +206,10 @@ class ClientAsyncReader final : public ClientAsyncReaderInterface<R> {
   // delete to the operator new so that some compilers will not complain (see
   // https://github.com/grpc/grpc/issues/11301) Note at the time of adding this
   // there are no tests catching the compiler warning.
-  static void operator delete(void*, void*) { assert(0); }
+  static void operator delete(void*, void*) { GPR_CODEGEN_ASSERT(false); }
 
   void StartCall(void* tag) override {
-    assert(!started_);
+    GPR_CODEGEN_ASSERT(!started_);
     started_ = true;
     StartCallInternal(tag);
   }
@@ -226,7 +223,7 @@ class ClientAsyncReader final : public ClientAsyncReaderInterface<R> {
   ///     calling code can access the received metadata through the
   ///     \a ClientContext.
   void ReadInitialMetadata(void* tag) override {
-    assert(started_);
+    GPR_CODEGEN_ASSERT(started_);
     GPR_CODEGEN_ASSERT(!context_->initial_metadata_received_);
 
     meta_ops_.set_output_tag(tag);
@@ -235,7 +232,7 @@ class ClientAsyncReader final : public ClientAsyncReaderInterface<R> {
   }
 
   void Read(R* msg, void* tag) override {
-    assert(started_);
+    GPR_CODEGEN_ASSERT(started_);
     read_ops_.set_output_tag(tag);
     if (!context_->initial_metadata_received_) {
       read_ops_.RecvInitialMetadata(context_);
@@ -249,8 +246,8 @@ class ClientAsyncReader final : public ClientAsyncReaderInterface<R> {
   /// Side effect:
   ///   - the \a ClientContext associated with this call is updated with
   ///     possible initial and trailing metadata received from the server.
-  void Finish(Status* status, void* tag) override {
-    assert(started_);
+  void Finish(::grpc::Status* status, void* tag) override {
+    GPR_CODEGEN_ASSERT(started_);
     finish_ops_.set_output_tag(tag);
     if (!context_->initial_metadata_received_) {
       finish_ops_.RecvInitialMetadata(context_);
@@ -262,7 +259,7 @@ class ClientAsyncReader final : public ClientAsyncReaderInterface<R> {
  private:
   friend class internal::ClientAsyncReaderFactory<R>;
   template <class W>
-  ClientAsyncReader(::grpc::internal::Call call, ClientContext* context,
+  ClientAsyncReader(::grpc::internal::Call call, ::grpc::ClientContext* context,
                     const W& request, bool start, void* tag)
       : context_(context), call_(call), started_(start) {
     // TODO(ctiller): don't assert
@@ -271,18 +268,18 @@ class ClientAsyncReader final : public ClientAsyncReaderInterface<R> {
     if (start) {
       StartCallInternal(tag);
     } else {
-      assert(tag == nullptr);
+      GPR_CODEGEN_ASSERT(tag == nullptr);
     }
   }
 
   void StartCallInternal(void* tag) {
-    init_ops_.SendInitialMetadata(context_->send_initial_metadata_,
+    init_ops_.SendInitialMetadata(&context_->send_initial_metadata_,
                                   context_->initial_metadata_flags());
     init_ops_.set_output_tag(tag);
     call_.PerformOps(&init_ops_);
   }
 
-  ClientContext* context_;
+  ::grpc::ClientContext* context_;
   ::grpc::internal::Call call_;
   bool started_;
   ::grpc::internal::CallOpSet<::grpc::internal::CallOpSendInitialMetadata,
@@ -328,13 +325,13 @@ class ClientAsyncWriterFactory {
   /// message from the server upon a successful call to the \a Finish
   /// method of this instance.
   template <class R>
-  static ClientAsyncWriter<W>* Create(ChannelInterface* channel,
-                                      CompletionQueue* cq,
+  static ClientAsyncWriter<W>* Create(::grpc::ChannelInterface* channel,
+                                      ::grpc::CompletionQueue* cq,
                                       const ::grpc::internal::RpcMethod& method,
-                                      ClientContext* context, R* response,
-                                      bool start, void* tag) {
+                                      ::grpc::ClientContext* context,
+                                      R* response, bool start, void* tag) {
     ::grpc::internal::Call call = channel->CreateCall(method, context, cq);
-    return new (g_core_codegen_interface->grpc_call_arena_alloc(
+    return new (::grpc::g_core_codegen_interface->grpc_call_arena_alloc(
         call.call(), sizeof(ClientAsyncWriter<W>)))
         ClientAsyncWriter<W>(call, context, response, start, tag);
   }
@@ -348,8 +345,8 @@ template <class W>
 class ClientAsyncWriter final : public ClientAsyncWriterInterface<W> {
  public:
   // always allocated against a call arena, no memory free required
-  static void operator delete(void* ptr, std::size_t size) {
-    assert(size == sizeof(ClientAsyncWriter));
+  static void operator delete(void* /*ptr*/, std::size_t size) {
+    GPR_CODEGEN_ASSERT(size == sizeof(ClientAsyncWriter));
   }
 
   // This operator should never be called as the memory should be freed as part
@@ -357,10 +354,10 @@ class ClientAsyncWriter final : public ClientAsyncWriterInterface<W> {
   // delete to the operator new so that some compilers will not complain (see
   // https://github.com/grpc/grpc/issues/11301) Note at the time of adding this
   // there are no tests catching the compiler warning.
-  static void operator delete(void*, void*) { assert(0); }
+  static void operator delete(void*, void*) { GPR_CODEGEN_ASSERT(false); }
 
   void StartCall(void* tag) override {
-    assert(!started_);
+    GPR_CODEGEN_ASSERT(!started_);
     started_ = true;
     StartCallInternal(tag);
   }
@@ -373,7 +370,7 @@ class ClientAsyncWriter final : public ClientAsyncWriterInterface<W> {
   ///     associated with this call is updated, and the calling code can access
   ///     the received metadata through the \a ClientContext.
   void ReadInitialMetadata(void* tag) override {
-    assert(started_);
+    GPR_CODEGEN_ASSERT(started_);
     GPR_CODEGEN_ASSERT(!context_->initial_metadata_received_);
 
     meta_ops_.set_output_tag(tag);
@@ -382,15 +379,15 @@ class ClientAsyncWriter final : public ClientAsyncWriterInterface<W> {
   }
 
   void Write(const W& msg, void* tag) override {
-    assert(started_);
+    GPR_CODEGEN_ASSERT(started_);
     write_ops_.set_output_tag(tag);
     // TODO(ctiller): don't assert
     GPR_CODEGEN_ASSERT(write_ops_.SendMessage(msg).ok());
     call_.PerformOps(&write_ops_);
   }
 
-  void Write(const W& msg, WriteOptions options, void* tag) override {
-    assert(started_);
+  void Write(const W& msg, ::grpc::WriteOptions options, void* tag) override {
+    GPR_CODEGEN_ASSERT(started_);
     write_ops_.set_output_tag(tag);
     if (options.is_last_message()) {
       options.set_buffer_hint();
@@ -402,7 +399,7 @@ class ClientAsyncWriter final : public ClientAsyncWriterInterface<W> {
   }
 
   void WritesDone(void* tag) override {
-    assert(started_);
+    GPR_CODEGEN_ASSERT(started_);
     write_ops_.set_output_tag(tag);
     write_ops_.ClientSendClose();
     call_.PerformOps(&write_ops_);
@@ -415,8 +412,8 @@ class ClientAsyncWriter final : public ClientAsyncWriterInterface<W> {
   ///     possible initial and trailing metadata received from the server.
   ///   - attempts to fill in the \a response parameter passed to this class's
   ///     constructor with the server's response message.
-  void Finish(Status* status, void* tag) override {
-    assert(started_);
+  void Finish(::grpc::Status* status, void* tag) override {
+    GPR_CODEGEN_ASSERT(started_);
     finish_ops_.set_output_tag(tag);
     if (!context_->initial_metadata_received_) {
       finish_ops_.RecvInitialMetadata(context_);
@@ -428,7 +425,7 @@ class ClientAsyncWriter final : public ClientAsyncWriterInterface<W> {
  private:
   friend class internal::ClientAsyncWriterFactory<W>;
   template <class R>
-  ClientAsyncWriter(::grpc::internal::Call call, ClientContext* context,
+  ClientAsyncWriter(::grpc::internal::Call call, ::grpc::ClientContext* context,
                     R* response, bool start, void* tag)
       : context_(context), call_(call), started_(start) {
     finish_ops_.RecvMessage(response);
@@ -436,12 +433,12 @@ class ClientAsyncWriter final : public ClientAsyncWriterInterface<W> {
     if (start) {
       StartCallInternal(tag);
     } else {
-      assert(tag == nullptr);
+      GPR_CODEGEN_ASSERT(tag == nullptr);
     }
   }
 
   void StartCallInternal(void* tag) {
-    write_ops_.SendInitialMetadata(context_->send_initial_metadata_,
+    write_ops_.SendInitialMetadata(&context_->send_initial_metadata_,
                                    context_->initial_metadata_flags());
     // if corked bit is set in context, we just keep the initial metadata
     // buffered up to coalesce with later message send. No op is performed.
@@ -451,7 +448,7 @@ class ClientAsyncWriter final : public ClientAsyncWriterInterface<W> {
     }
   }
 
-  ClientContext* context_;
+  ::grpc::ClientContext* context_;
   ::grpc::internal::Call call_;
   bool started_;
   ::grpc::internal::CallOpSet<::grpc::internal::CallOpRecvInitialMetadata>
@@ -494,12 +491,12 @@ class ClientAsyncReaderWriterFactory {
   /// Note that \a context will be used to fill in custom initial metadata
   /// used to send to the server when starting the call.
   static ClientAsyncReaderWriter<W, R>* Create(
-      ChannelInterface* channel, CompletionQueue* cq,
-      const ::grpc::internal::RpcMethod& method, ClientContext* context,
+      ::grpc::ChannelInterface* channel, ::grpc::CompletionQueue* cq,
+      const ::grpc::internal::RpcMethod& method, ::grpc::ClientContext* context,
       bool start, void* tag) {
     ::grpc::internal::Call call = channel->CreateCall(method, context, cq);
 
-    return new (g_core_codegen_interface->grpc_call_arena_alloc(
+    return new (::grpc::g_core_codegen_interface->grpc_call_arena_alloc(
         call.call(), sizeof(ClientAsyncReaderWriter<W, R>)))
         ClientAsyncReaderWriter<W, R>(call, context, start, tag);
   }
@@ -515,8 +512,8 @@ class ClientAsyncReaderWriter final
     : public ClientAsyncReaderWriterInterface<W, R> {
  public:
   // always allocated against a call arena, no memory free required
-  static void operator delete(void* ptr, std::size_t size) {
-    assert(size == sizeof(ClientAsyncReaderWriter));
+  static void operator delete(void* /*ptr*/, std::size_t size) {
+    GPR_CODEGEN_ASSERT(size == sizeof(ClientAsyncReaderWriter));
   }
 
   // This operator should never be called as the memory should be freed as part
@@ -524,10 +521,10 @@ class ClientAsyncReaderWriter final
   // delete to the operator new so that some compilers will not complain (see
   // https://github.com/grpc/grpc/issues/11301) Note at the time of adding this
   // there are no tests catching the compiler warning.
-  static void operator delete(void*, void*) { assert(0); }
+  static void operator delete(void*, void*) { GPR_CODEGEN_ASSERT(false); }
 
   void StartCall(void* tag) override {
-    assert(!started_);
+    GPR_CODEGEN_ASSERT(!started_);
     started_ = true;
     StartCallInternal(tag);
   }
@@ -540,7 +537,7 @@ class ClientAsyncReaderWriter final
   ///     is updated with it, and then the receiving initial metadata can
   ///     be accessed through this \a ClientContext.
   void ReadInitialMetadata(void* tag) override {
-    assert(started_);
+    GPR_CODEGEN_ASSERT(started_);
     GPR_CODEGEN_ASSERT(!context_->initial_metadata_received_);
 
     meta_ops_.set_output_tag(tag);
@@ -549,7 +546,7 @@ class ClientAsyncReaderWriter final
   }
 
   void Read(R* msg, void* tag) override {
-    assert(started_);
+    GPR_CODEGEN_ASSERT(started_);
     read_ops_.set_output_tag(tag);
     if (!context_->initial_metadata_received_) {
       read_ops_.RecvInitialMetadata(context_);
@@ -559,15 +556,15 @@ class ClientAsyncReaderWriter final
   }
 
   void Write(const W& msg, void* tag) override {
-    assert(started_);
+    GPR_CODEGEN_ASSERT(started_);
     write_ops_.set_output_tag(tag);
     // TODO(ctiller): don't assert
     GPR_CODEGEN_ASSERT(write_ops_.SendMessage(msg).ok());
     call_.PerformOps(&write_ops_);
   }
 
-  void Write(const W& msg, WriteOptions options, void* tag) override {
-    assert(started_);
+  void Write(const W& msg, ::grpc::WriteOptions options, void* tag) override {
+    GPR_CODEGEN_ASSERT(started_);
     write_ops_.set_output_tag(tag);
     if (options.is_last_message()) {
       options.set_buffer_hint();
@@ -579,7 +576,7 @@ class ClientAsyncReaderWriter final
   }
 
   void WritesDone(void* tag) override {
-    assert(started_);
+    GPR_CODEGEN_ASSERT(started_);
     write_ops_.set_output_tag(tag);
     write_ops_.ClientSendClose();
     call_.PerformOps(&write_ops_);
@@ -589,8 +586,8 @@ class ClientAsyncReaderWriter final
   /// Side effect
   ///   - the \a ClientContext associated with this call is updated with
   ///     possible initial and trailing metadata sent from the server.
-  void Finish(Status* status, void* tag) override {
-    assert(started_);
+  void Finish(::grpc::Status* status, void* tag) override {
+    GPR_CODEGEN_ASSERT(started_);
     finish_ops_.set_output_tag(tag);
     if (!context_->initial_metadata_received_) {
       finish_ops_.RecvInitialMetadata(context_);
@@ -601,18 +598,18 @@ class ClientAsyncReaderWriter final
 
  private:
   friend class internal::ClientAsyncReaderWriterFactory<W, R>;
-  ClientAsyncReaderWriter(::grpc::internal::Call call, ClientContext* context,
-                          bool start, void* tag)
+  ClientAsyncReaderWriter(::grpc::internal::Call call,
+                          ::grpc::ClientContext* context, bool start, void* tag)
       : context_(context), call_(call), started_(start) {
     if (start) {
       StartCallInternal(tag);
     } else {
-      assert(tag == nullptr);
+      GPR_CODEGEN_ASSERT(tag == nullptr);
     }
   }
 
   void StartCallInternal(void* tag) {
-    write_ops_.SendInitialMetadata(context_->send_initial_metadata_,
+    write_ops_.SendInitialMetadata(&context_->send_initial_metadata_,
                                    context_->initial_metadata_flags());
     // if corked bit is set in context, we just keep the initial metadata
     // buffered up to coalesce with later message send. No op is performed.
@@ -622,7 +619,7 @@ class ClientAsyncReaderWriter final
     }
   }
 
-  ClientContext* context_;
+  ::grpc::ClientContext* context_;
   ::grpc::internal::Call call_;
   bool started_;
   ::grpc::internal::CallOpSet<::grpc::internal::CallOpRecvInitialMetadata>
@@ -641,7 +638,7 @@ class ClientAsyncReaderWriter final
 
 template <class W, class R>
 class ServerAsyncReaderInterface
-    : public internal::ServerAsyncStreamingInterface,
+    : public ::grpc::internal::ServerAsyncStreamingInterface,
       public internal::AsyncReaderInterface<R> {
  public:
   /// Indicate that the stream is to be finished with a certain status code
@@ -661,12 +658,13 @@ class ServerAsyncReaderInterface
   /// some failure occurred when trying to do so.
   ///
   /// gRPC doesn't take ownership or a reference to \a msg or \a status, so it
-  /// is safe to to deallocate once Finish returns.
+  /// is safe to deallocate once Finish returns.
   ///
   /// \param[in] tag Tag identifying this request.
   /// \param[in] status To be sent to the client as the result of this call.
   /// \param[in] msg To be sent to the client as the response for this call.
-  virtual void Finish(const W& msg, const Status& status, void* tag) = 0;
+  virtual void Finish(const W& msg, const ::grpc::Status& status,
+                      void* tag) = 0;
 
   /// Indicate that the stream is to be finished with a certain
   /// non-OK status code.
@@ -689,7 +687,7 @@ class ServerAsyncReaderInterface
   /// \param[in] tag Tag identifying this request.
   /// \param[in] status To be sent to the client as the result of this call.
   ///     - Note: \a status must have a non-OK code.
-  virtual void FinishWithError(const Status& status, void* tag) = 0;
+  virtual void FinishWithError(const ::grpc::Status& status, void* tag) = 0;
 };
 
 /// Async server-side API for doing client-streaming RPCs,
@@ -698,7 +696,7 @@ class ServerAsyncReaderInterface
 template <class W, class R>
 class ServerAsyncReader final : public ServerAsyncReaderInterface<W, R> {
  public:
-  explicit ServerAsyncReader(ServerContext* ctx)
+  explicit ServerAsyncReader(::grpc::ServerContext* ctx)
       : call_(nullptr, nullptr, nullptr), ctx_(ctx) {}
 
   /// See \a ServerAsyncStreamingInterface::SendInitialMetadata for semantics.
@@ -710,7 +708,7 @@ class ServerAsyncReader final : public ServerAsyncReaderInterface<W, R> {
     GPR_CODEGEN_ASSERT(!ctx_->sent_initial_metadata_);
 
     meta_ops_.set_output_tag(tag);
-    meta_ops_.SendInitialMetadata(ctx_->initial_metadata_,
+    meta_ops_.SendInitialMetadata(&ctx_->initial_metadata_,
                                   ctx_->initial_metadata_flags());
     if (ctx_->compression_level_set()) {
       meta_ops_.set_compression_level(ctx_->compression_level());
@@ -735,11 +733,11 @@ class ServerAsyncReader final : public ServerAsyncReaderInterface<W, R> {
   /// Note: \a msg is not sent if \a status has a non-OK code.
   ///
   /// gRPC doesn't take ownership or a reference to \a msg and \a status, so it
-  /// is safe to to deallocate once Finish returns.
-  void Finish(const W& msg, const Status& status, void* tag) override {
+  /// is safe to deallocate once Finish returns.
+  void Finish(const W& msg, const ::grpc::Status& status, void* tag) override {
     finish_ops_.set_output_tag(tag);
     if (!ctx_->sent_initial_metadata_) {
-      finish_ops_.SendInitialMetadata(ctx_->initial_metadata_,
+      finish_ops_.SendInitialMetadata(&ctx_->initial_metadata_,
                                       ctx_->initial_metadata_flags());
       if (ctx_->compression_level_set()) {
         finish_ops_.set_compression_level(ctx_->compression_level());
@@ -748,10 +746,10 @@ class ServerAsyncReader final : public ServerAsyncReaderInterface<W, R> {
     }
     // The response is dropped if the status is not OK.
     if (status.ok()) {
-      finish_ops_.ServerSendStatus(ctx_->trailing_metadata_,
+      finish_ops_.ServerSendStatus(&ctx_->trailing_metadata_,
                                    finish_ops_.SendMessage(msg));
     } else {
-      finish_ops_.ServerSendStatus(ctx_->trailing_metadata_, status);
+      finish_ops_.ServerSendStatus(&ctx_->trailing_metadata_, status);
     }
     call_.PerformOps(&finish_ops_);
   }
@@ -765,18 +763,18 @@ class ServerAsyncReader final : public ServerAsyncReaderInterface<W, R> {
   ///
   /// gRPC doesn't take ownership or a reference to \a status, so it is safe to
   /// to deallocate once FinishWithError returns.
-  void FinishWithError(const Status& status, void* tag) override {
+  void FinishWithError(const ::grpc::Status& status, void* tag) override {
     GPR_CODEGEN_ASSERT(!status.ok());
     finish_ops_.set_output_tag(tag);
     if (!ctx_->sent_initial_metadata_) {
-      finish_ops_.SendInitialMetadata(ctx_->initial_metadata_,
+      finish_ops_.SendInitialMetadata(&ctx_->initial_metadata_,
                                       ctx_->initial_metadata_flags());
       if (ctx_->compression_level_set()) {
         finish_ops_.set_compression_level(ctx_->compression_level());
       }
       ctx_->sent_initial_metadata_ = true;
     }
-    finish_ops_.ServerSendStatus(ctx_->trailing_metadata_, status);
+    finish_ops_.ServerSendStatus(&ctx_->trailing_metadata_, status);
     call_.PerformOps(&finish_ops_);
   }
 
@@ -784,7 +782,7 @@ class ServerAsyncReader final : public ServerAsyncReaderInterface<W, R> {
   void BindCall(::grpc::internal::Call* call) override { call_ = *call; }
 
   ::grpc::internal::Call call_;
-  ServerContext* ctx_;
+  ::grpc::ServerContext* ctx_;
   ::grpc::internal::CallOpSet<::grpc::internal::CallOpSendInitialMetadata>
       meta_ops_;
   ::grpc::internal::CallOpSet<::grpc::internal::CallOpRecvMessage<R>> read_ops_;
@@ -796,7 +794,7 @@ class ServerAsyncReader final : public ServerAsyncReaderInterface<W, R> {
 
 template <class W>
 class ServerAsyncWriterInterface
-    : public internal::ServerAsyncStreamingInterface,
+    : public ::grpc::internal::ServerAsyncStreamingInterface,
       public internal::AsyncWriterInterface<W> {
  public:
   /// Indicate that the stream is to be finished with a certain status code.
@@ -820,7 +818,7 @@ class ServerAsyncWriterInterface
   ///
   /// \param[in] tag Tag identifying this request.
   /// \param[in] status To be sent to the client as the result of this call.
-  virtual void Finish(const Status& status, void* tag) = 0;
+  virtual void Finish(const ::grpc::Status& status, void* tag) = 0;
 
   /// Request the writing of \a msg and coalesce it with trailing metadata which
   /// contains \a status, using WriteOptions options with
@@ -830,14 +828,14 @@ class ServerAsyncWriterInterface
   /// in a single step.
   ///
   /// gRPC doesn't take ownership or a reference to \a msg and \a status, so it
-  /// is safe to to deallocate once WriteAndFinish returns.
+  /// is safe to deallocate once WriteAndFinish returns.
   ///
   /// \param[in] msg The message to be written.
   /// \param[in] options The WriteOptions to be used to write this message.
   /// \param[in] status The Status that server returns to client.
   /// \param[in] tag The tag identifying the operation.
-  virtual void WriteAndFinish(const W& msg, WriteOptions options,
-                              const Status& status, void* tag) = 0;
+  virtual void WriteAndFinish(const W& msg, ::grpc::WriteOptions options,
+                              const ::grpc::Status& status, void* tag) = 0;
 };
 
 /// Async server-side API for doing server streaming RPCs,
@@ -845,7 +843,7 @@ class ServerAsyncWriterInterface
 template <class W>
 class ServerAsyncWriter final : public ServerAsyncWriterInterface<W> {
  public:
-  explicit ServerAsyncWriter(ServerContext* ctx)
+  explicit ServerAsyncWriter(::grpc::ServerContext* ctx)
       : call_(nullptr, nullptr, nullptr), ctx_(ctx) {}
 
   /// See \a ServerAsyncStreamingInterface::SendInitialMetadata for semantics.
@@ -859,7 +857,7 @@ class ServerAsyncWriter final : public ServerAsyncWriterInterface<W> {
     GPR_CODEGEN_ASSERT(!ctx_->sent_initial_metadata_);
 
     meta_ops_.set_output_tag(tag);
-    meta_ops_.SendInitialMetadata(ctx_->initial_metadata_,
+    meta_ops_.SendInitialMetadata(&ctx_->initial_metadata_,
                                   ctx_->initial_metadata_flags());
     if (ctx_->compression_level_set()) {
       meta_ops_.set_compression_level(ctx_->compression_level());
@@ -876,7 +874,7 @@ class ServerAsyncWriter final : public ServerAsyncWriterInterface<W> {
     call_.PerformOps(&write_ops_);
   }
 
-  void Write(const W& msg, WriteOptions options, void* tag) override {
+  void Write(const W& msg, ::grpc::WriteOptions options, void* tag) override {
     write_ops_.set_output_tag(tag);
     if (options.is_last_message()) {
       options.set_buffer_hint();
@@ -897,14 +895,14 @@ class ServerAsyncWriter final : public ServerAsyncWriterInterface<W> {
   /// Note: \a status must have an OK code.
   ///
   /// gRPC doesn't take ownership or a reference to \a msg and \a status, so it
-  /// is safe to to deallocate once WriteAndFinish returns.
-  void WriteAndFinish(const W& msg, WriteOptions options, const Status& status,
-                      void* tag) override {
+  /// is safe to deallocate once WriteAndFinish returns.
+  void WriteAndFinish(const W& msg, ::grpc::WriteOptions options,
+                      const ::grpc::Status& status, void* tag) override {
     write_ops_.set_output_tag(tag);
     EnsureInitialMetadataSent(&write_ops_);
     options.set_buffer_hint();
     GPR_CODEGEN_ASSERT(write_ops_.SendMessage(msg, options).ok());
-    write_ops_.ServerSendStatus(ctx_->trailing_metadata_, status);
+    write_ops_.ServerSendStatus(&ctx_->trailing_metadata_, status);
     call_.PerformOps(&write_ops_);
   }
 
@@ -919,10 +917,10 @@ class ServerAsyncWriter final : public ServerAsyncWriterInterface<W> {
   ///
   /// gRPC doesn't take ownership or a reference to \a status, so it is safe to
   /// to deallocate once Finish returns.
-  void Finish(const Status& status, void* tag) override {
+  void Finish(const ::grpc::Status& status, void* tag) override {
     finish_ops_.set_output_tag(tag);
     EnsureInitialMetadataSent(&finish_ops_);
-    finish_ops_.ServerSendStatus(ctx_->trailing_metadata_, status);
+    finish_ops_.ServerSendStatus(&ctx_->trailing_metadata_, status);
     call_.PerformOps(&finish_ops_);
   }
 
@@ -932,7 +930,7 @@ class ServerAsyncWriter final : public ServerAsyncWriterInterface<W> {
   template <class T>
   void EnsureInitialMetadataSent(T* ops) {
     if (!ctx_->sent_initial_metadata_) {
-      ops->SendInitialMetadata(ctx_->initial_metadata_,
+      ops->SendInitialMetadata(&ctx_->initial_metadata_,
                                ctx_->initial_metadata_flags());
       if (ctx_->compression_level_set()) {
         ops->set_compression_level(ctx_->compression_level());
@@ -942,7 +940,7 @@ class ServerAsyncWriter final : public ServerAsyncWriterInterface<W> {
   }
 
   ::grpc::internal::Call call_;
-  ServerContext* ctx_;
+  ::grpc::ServerContext* ctx_;
   ::grpc::internal::CallOpSet<::grpc::internal::CallOpSendInitialMetadata>
       meta_ops_;
   ::grpc::internal::CallOpSet<::grpc::internal::CallOpSendInitialMetadata,
@@ -957,7 +955,7 @@ class ServerAsyncWriter final : public ServerAsyncWriterInterface<W> {
 /// Server-side interface for asynchronous bi-directional streaming.
 template <class W, class R>
 class ServerAsyncReaderWriterInterface
-    : public internal::ServerAsyncStreamingInterface,
+    : public ::grpc::internal::ServerAsyncStreamingInterface,
       public internal::AsyncWriterInterface<W>,
       public internal::AsyncReaderInterface<R> {
  public:
@@ -983,7 +981,7 @@ class ServerAsyncReaderWriterInterface
   ///
   /// \param[in] tag Tag identifying this request.
   /// \param[in] status To be sent to the client as the result of this call.
-  virtual void Finish(const Status& status, void* tag) = 0;
+  virtual void Finish(const ::grpc::Status& status, void* tag) = 0;
 
   /// Request the writing of \a msg and coalesce it with trailing metadata which
   /// contains \a status, using WriteOptions options with
@@ -993,14 +991,14 @@ class ServerAsyncReaderWriterInterface
   /// single step.
   ///
   /// gRPC doesn't take ownership or a reference to \a msg and \a status, so it
-  /// is safe to to deallocate once WriteAndFinish returns.
+  /// is safe to deallocate once WriteAndFinish returns.
   ///
   /// \param[in] msg The message to be written.
   /// \param[in] options The WriteOptions to be used to write this message.
   /// \param[in] status The Status that server returns to client.
   /// \param[in] tag The tag identifying the operation.
-  virtual void WriteAndFinish(const W& msg, WriteOptions options,
-                              const Status& status, void* tag) = 0;
+  virtual void WriteAndFinish(const W& msg, ::grpc::WriteOptions options,
+                              const ::grpc::Status& status, void* tag) = 0;
 };
 
 /// Async server-side API for doing bidirectional streaming RPCs,
@@ -1011,7 +1009,7 @@ template <class W, class R>
 class ServerAsyncReaderWriter final
     : public ServerAsyncReaderWriterInterface<W, R> {
  public:
-  explicit ServerAsyncReaderWriter(ServerContext* ctx)
+  explicit ServerAsyncReaderWriter(::grpc::ServerContext* ctx)
       : call_(nullptr, nullptr, nullptr), ctx_(ctx) {}
 
   /// See \a ServerAsyncStreamingInterface::SendInitialMetadata for semantics.
@@ -1025,7 +1023,7 @@ class ServerAsyncReaderWriter final
     GPR_CODEGEN_ASSERT(!ctx_->sent_initial_metadata_);
 
     meta_ops_.set_output_tag(tag);
-    meta_ops_.SendInitialMetadata(ctx_->initial_metadata_,
+    meta_ops_.SendInitialMetadata(&ctx_->initial_metadata_,
                                   ctx_->initial_metadata_flags());
     if (ctx_->compression_level_set()) {
       meta_ops_.set_compression_level(ctx_->compression_level());
@@ -1048,7 +1046,7 @@ class ServerAsyncReaderWriter final
     call_.PerformOps(&write_ops_);
   }
 
-  void Write(const W& msg, WriteOptions options, void* tag) override {
+  void Write(const W& msg, ::grpc::WriteOptions options, void* tag) override {
     write_ops_.set_output_tag(tag);
     if (options.is_last_message()) {
       options.set_buffer_hint();
@@ -1068,14 +1066,14 @@ class ServerAsyncReaderWriter final
   /// Note: \a status must have an OK code.
   //
   /// gRPC doesn't take ownership or a reference to \a msg and \a status, so it
-  /// is safe to to deallocate once WriteAndFinish returns.
-  void WriteAndFinish(const W& msg, WriteOptions options, const Status& status,
-                      void* tag) override {
+  /// is safe to deallocate once WriteAndFinish returns.
+  void WriteAndFinish(const W& msg, ::grpc::WriteOptions options,
+                      const ::grpc::Status& status, void* tag) override {
     write_ops_.set_output_tag(tag);
     EnsureInitialMetadataSent(&write_ops_);
     options.set_buffer_hint();
     GPR_CODEGEN_ASSERT(write_ops_.SendMessage(msg, options).ok());
-    write_ops_.ServerSendStatus(ctx_->trailing_metadata_, status);
+    write_ops_.ServerSendStatus(&ctx_->trailing_metadata_, status);
     call_.PerformOps(&write_ops_);
   }
 
@@ -1090,11 +1088,11 @@ class ServerAsyncReaderWriter final
   //
   /// gRPC doesn't take ownership or a reference to \a status, so it is safe to
   /// to deallocate once Finish returns.
-  void Finish(const Status& status, void* tag) override {
+  void Finish(const ::grpc::Status& status, void* tag) override {
     finish_ops_.set_output_tag(tag);
     EnsureInitialMetadataSent(&finish_ops_);
 
-    finish_ops_.ServerSendStatus(ctx_->trailing_metadata_, status);
+    finish_ops_.ServerSendStatus(&ctx_->trailing_metadata_, status);
     call_.PerformOps(&finish_ops_);
   }
 
@@ -1106,7 +1104,7 @@ class ServerAsyncReaderWriter final
   template <class T>
   void EnsureInitialMetadataSent(T* ops) {
     if (!ctx_->sent_initial_metadata_) {
-      ops->SendInitialMetadata(ctx_->initial_metadata_,
+      ops->SendInitialMetadata(&ctx_->initial_metadata_,
                                ctx_->initial_metadata_flags());
       if (ctx_->compression_level_set()) {
         ops->set_compression_level(ctx_->compression_level());
@@ -1116,7 +1114,7 @@ class ServerAsyncReaderWriter final
   }
 
   ::grpc::internal::Call call_;
-  ServerContext* ctx_;
+  ::grpc::ServerContext* ctx_;
   ::grpc::internal::CallOpSet<::grpc::internal::CallOpSendInitialMetadata>
       meta_ops_;
   ::grpc::internal::CallOpSet<::grpc::internal::CallOpRecvMessage<R>> read_ops_;
@@ -1130,5 +1128,4 @@ class ServerAsyncReaderWriter final
 };
 
 }  // namespace grpc
-
 #endif  // GRPCPP_IMPL_CODEGEN_ASYNC_STREAM_H

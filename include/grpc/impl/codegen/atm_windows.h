@@ -22,9 +22,13 @@
 /** Win32 variant of atm_platform.h */
 #include <grpc/impl/codegen/port_platform.h>
 
+#ifdef GPR_WINDOWS
+
 typedef intptr_t gpr_atm;
 #define GPR_ATM_MAX INTPTR_MAX
 #define GPR_ATM_MIN INTPTR_MIN
+#define GPR_ATM_INC_CAS_THEN(blah) blah
+#define GPR_ATM_INC_ADD_THEN(blah) blah
 
 #define gpr_atm_full_barrier MemoryBarrier
 
@@ -122,5 +126,7 @@ static __inline gpr_atm gpr_atm_full_fetch_add(gpr_atm* p, gpr_atm delta) {
 static __inline gpr_atm gpr_atm_full_xchg(gpr_atm* p, gpr_atm n) {
   return (gpr_atm)InterlockedExchangePointer((PVOID*)p, (PVOID)n);
 }
+
+#endif /* GPR_WINDOWS */
 
 #endif /* GRPC_IMPL_CODEGEN_ATM_WINDOWS_H */
